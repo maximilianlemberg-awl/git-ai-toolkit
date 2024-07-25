@@ -1,10 +1,17 @@
 from setuptools import setup, find_packages
+import pathlib
+
+HERE = pathlib.Path(__file__).parent
+README = (HERE / "README.md").read_text()
 
 setup(
     name="git_ai_toolkit",
-    version="0.1.2",
+    version="0.1.3",
     description="A toolkit for using OpenAI's GPT-4o model to assist with Git workflows.",
+    long_description=README,
+    long_description_content_type='text/markdown',
     author="Maximilian Lemberg",
+    url="https://github.com/maximilianlemberg-awl/git-ai-toolkit",
     packages=find_packages(),
     install_requires=[
         "openai>=1.37.0",

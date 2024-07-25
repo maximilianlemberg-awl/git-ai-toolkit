@@ -3,7 +3,7 @@
 import os
 import subprocess
 import openai
-from colorama import Fore, Style, init
+from colorama import Fore, Style
 
 client = openai.OpenAI()
 
@@ -24,7 +24,6 @@ def get_git_diff(repo_path):
     return result.stdout.decode('utf-8')
 
 def summarize_diff(diff_text):
-    # Call the OpenAI API to get a summary
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
@@ -35,7 +34,6 @@ def summarize_diff(diff_text):
     )
     summary = response.choices[0].message.content
     return summary
-
 
 def main():
     repo_path = find_git_root()
@@ -53,7 +51,6 @@ def main():
             subprocess.run(['git', '-C', repo_path, 'commit', '-m', summary])
             print(f"{Fore.GREEN}✅ Changes committed successfully.")
 
-            # Ask for second confirmation before pushing
             confirm_push = input(
                 f"{Fore.CYAN}Do you want to push the changes to the remote repository? (y/n): ").strip().lower()
             if confirm_push == 'y':
@@ -69,4 +66,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
