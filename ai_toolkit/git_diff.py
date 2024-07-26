@@ -24,16 +24,39 @@ def get_git_diff(repo_path):
     return result.stdout.decode('utf-8')
 
 def summarize_diff(diff_text):
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant who can succinctly summarize code changes. Summarize the given diff in a sentence of less than 80 characters. You should always avoid using pharenthesis in your summary."},
-            {"role": "user", "content": f"Please summarize the following git diff for a commit message:\n\n{diff_text}"}
-        ],
-        max_tokens=100
-    )
-    summary = response.choices[0].message.content
-    return summary
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant who can succinctly summarize code changes. Summarize the given diff in a sentence of less than 80 characters. You should always avoid using pharenthesis in your summary."},
+                {"role": "user", "content": f"Please summarize the following git diff for a commit message:\n\n{diff_text}"}
+            ],
+            max_tokens=100
+        )
+        summary = response.choices[0].message.content
+        return summary
+    except openai.APIConnectionError:
+        print(f"{Fore.RED}Error: Unable to connect to the OpenAI API. Please check your network connection.")
+        print(f"{Fore.RED}Error: The request timed out. Please try again later.")
+    except openai.AuthenticationError:
+        print(f"{Fore.RED}Error: Authentication failed. Please check your API key.")
+    except openai.BadRequestError as e:
+        print(f"{Fore.RED}Error: Bad request - {e}. Please check the request parameters.")
+    except openai.ConflictError:
+        print(f"{Fore.RED}Error: Conflict detected. The resource may have been updated by another request.")
+    except openai.InternalServerError:
+        print(f"{Fore.RED}Error: Internal server error. Please try again later.")
+    except openai.NotFoundError:
+        print(f"{Fore.RED}Error: The requested resource was not found.")
+    except openai.PermissionDeniedError:
+        print(f"{Fore.RED}Error: Permission denied. You do not have access to the requested resource.")
+    except openai.RateLimitError:
+        print(f"{Fore.RED}Error: Rate limit exceeded. Please pace your requests.")
+    except openai.UnprocessableEntityError:
+        print(f"{Fore.RED}Error: The request could not be processed. Please try again.")
+    except Exception as e:
+        print(f"{Fore.RED}An unexpected error occurred: {e}")
+    return None
 
 def main():
     repo_path = find_git_root()
