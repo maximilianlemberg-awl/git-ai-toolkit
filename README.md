@@ -1,16 +1,10 @@
-# Git AI Toolkit
+# 🧰 Git AI Toolkit
 
-## Description
+## 👋 Description
 
-This script generates succinct commit messages for your Git repository by summarizing the changes using the OpenAI API. It identifies the Git repository, checks for changes using `git diff`, and uses OpenAI to provide a one-sentence summary of the changes. If the user approves, the changes can be committed and optionally pushed to the remote repository.
+This tool can generate commit messages for your Git repository by summarizing the changes using the OpenAI API. It identifies the Git repository, checks for changes using `git diff`, and uses OpenAI to provide a one-sentence summary of the changes. If you approve, the changes can be committed and optionally pushed to the remote repository.
 
-## Prerequisites
-
-- Python 3.9
-- Git
-- Pip
-
-## Installation
+## 🚀 Installation
 
 Install the package via pip:
 
@@ -18,7 +12,7 @@ Install the package via pip:
 pip install git_ai_toolkit
 ```
 
-## Configuration
+## ⚙️ Configuration
 
 1. **Add Your OpenAI API Key**
 
@@ -40,7 +34,7 @@ pip install git_ai_toolkit
 
    Replace `your_openai_api_key_here` with your actual OpenAI API key.
 
-## Usage
+## 💻 Usage
 
 1. **Navigate to Your Git Project Directory**
 
