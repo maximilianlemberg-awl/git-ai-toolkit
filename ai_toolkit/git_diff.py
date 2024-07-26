@@ -37,7 +37,6 @@ def summarize_diff(diff_text):
         return summary
     except openai.APIConnectionError:
         print(f"{Fore.RED}Error: Unable to connect to the OpenAI API. Please check your network connection.")
-        print(f"{Fore.RED}Error: The request timed out. Please try again later.")
     except openai.AuthenticationError:
         print(f"{Fore.RED}Error: Authentication failed. Please check your API key.")
     except openai.BadRequestError as e:
@@ -65,6 +64,8 @@ def main():
     diff_text = get_git_diff(repo_path)
     if diff_text:
         summary = summarize_diff(diff_text)
+        if summary is None:
+            return
         print(f"{Fore.GREEN}Suggested commit message:\n\n{Style.BRIGHT}{summary}")
 
         confirm = input(f"{Fore.CYAN}Do you want to commit the changes with the above message? (y/n): ").strip().lower()

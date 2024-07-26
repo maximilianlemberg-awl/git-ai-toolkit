@@ -6,7 +6,7 @@ README = (HERE / "README.md").read_text()
 
 setup(
     name="git_ai_toolkit",
-    version="0.1.4",
+    version="0.1.5",
     description="A toolkit for using OpenAI's GPT-4o-mini model to assist with Git workflows.",
     long_description=README,
     long_description_content_type='text/markdown',
