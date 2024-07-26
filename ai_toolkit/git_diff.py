@@ -25,7 +25,7 @@ def get_git_diff(repo_path):
 
 def summarize_diff(diff_text):
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": "You are a helpful assistant who can succinctly summarize code changes. Summarize the given diff in a sentence of less than 80 characters. You should always avoid using pharenthesis in your summary."},
             {"role": "user", "content": f"Please summarize the following git diff for a commit message:\n\n{diff_text}"}
