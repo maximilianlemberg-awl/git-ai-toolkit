@@ -28,8 +28,19 @@ def summarize_diff(diff_text):
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are a helpful assistant who can succinctly summarize code changes. Summarize the given diff in a sentence of less than 80 characters. You should always avoid using pharenthesis in your summary."},
-                {"role": "user", "content": f"Please summarize the following git diff for a commit message:\n\n{diff_text}"}
+                {"role": "system", "content": "You are an expert at writing concise and informative git commit messages. Summarize the given diff in a single line of 50-72 characters, starting with an imperative verb. Focus on the 'why' behind the change, not just the 'what'. Avoid parentheses and unnecessary details. Use the present tense."},
+                {"role": "user", "content": f"""Generate a concise git commit message for this diff:
+
+                                                {diff_text}
+                                                
+                                                Guidelines:
+                                                
+                                                Start with an imperative verb (e.g., "Add", "Fix", "Refactor").
+                                                Limit the message to 50-72 characters.
+                                                Explain the reason for the change, focusing on the intent rather than the specific modifications.
+                                                Use present tense.
+                                                Be specific but concise, providing enough context for understanding.
+                                                Avoid redundancy (e.g., "This commit...")."""}
             ],
             max_tokens=100
         )
