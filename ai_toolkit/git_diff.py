@@ -696,8 +696,9 @@ def main():
     # Allow user to stage specific files if needed
     if changes["has_unstaged"] and not changes["has_staged"] and not args.offline:
         print(f"{Fore.CYAN}You have unstaged changes but nothing is staged yet.")
-        print(f"{Fore.CYAN}Would you like to stage changes now? (y/n): ", end="")
-        if input().strip().lower() == 'y':
+        print(f"{Fore.CYAN}Would you like to stage changes now? (Y/n): ", end="")
+        response = input().strip().lower()
+        if response == '' or response == 'y':
             stage_specific_files(repo_path)
             # Refresh changes after staging
             changes = get_git_changes(repo_path)
@@ -706,8 +707,9 @@ def main():
     if not changes["has_staged"]:
         if args.offline:
             print(f"{Fore.YELLOW}⚠ No staged changes. You need to stage some changes first.")
-            print(f"{Fore.CYAN}Would you like to stage all changes? (y/n): ", end="")
-            if input().strip().lower() == 'y':
+            print(f"{Fore.CYAN}Would you like to stage all changes? (Y/n): ", end="")
+            response = input().strip().lower()
+            if response == '' or response == 'y':
                 subprocess.run(['git', '-C', repo_path, 'add', '-A'])
                 # Refresh changes
                 changes = get_git_changes(repo_path)
@@ -749,8 +751,9 @@ def main():
         summary = summarize_diff(user_prompt, system_prompt)
         if summary is None:
             # Offer to switch to offline mode
-            print(f"{Fore.CYAN}Would you like to switch to offline mode and write manually? (y/n): ", end="")
-            if input().strip().lower() == 'y':
+            print(f"{Fore.CYAN}Would you like to switch to offline mode and write manually? (Y/n): ", end="")
+            response = input().strip().lower()
+            if response == '' or response == 'y':
                 parsed_commit = create_commit_manual()
                 formatted_display = format_commit_display(parsed_commit)
             else:
@@ -800,8 +803,8 @@ def main():
     ]
     print("\n" + create_box("Options", options))
     
-    print(f"{Fore.CYAN}Your choice: ", end="")
-    choice = input().strip().lower()
+    print(f"{Fore.CYAN}Your choice [y]: ", end="")
+    choice = input().strip().lower() or 'y'
     
     if choice == 'e':
         print("\n" + create_box("Edit Commit Message"))
@@ -859,8 +862,9 @@ def main():
             # Push if requested or prompt
             should_push = args.push
             if not should_push:
-                print(f"{Fore.CYAN}Push changes to remote? (y/n): ", end="")
-                should_push = input().strip().lower() == 'y'
+                print(f"{Fore.CYAN}Push changes to remote? (Y/n): ", end="")
+                response = input().strip().lower()
+                should_push = response == '' or response == 'y'
             
             if should_push:
                 spinner = Spinner("Pushing changes to remote")
@@ -903,11 +907,9 @@ def main():
                     print(f"{Fore.GREEN}✓ Changes committed and pushed!")
                     
                     if pr_url:
-                        # URL found, create a clickable terminal link
-                        # This uses the OSC 8 hyperlink escape sequence format supported by most modern terminals
-                        # Format: \033]8;;URL\007LINK_TEXT\033]8;;\007
-                        clickable_link = f"\033]8;;{pr_url}\007{pr_url}\033]8;;\007"
-                        print(f"{Fore.YELLOW}  → Create a pull request: {Fore.CYAN}{Style.BRIGHT}{clickable_link}")
+                        # Display URL with instructions on how to open it
+                        print(f"{Fore.YELLOW}  → Create a pull request: {Fore.CYAN}{Style.BRIGHT}{pr_url}")
+                        print(f"{Fore.YELLOW}    (Command/Ctrl+click to open the URL)")
                     else:
                         # Try to determine repository type
                         remote_info = subprocess.run(
