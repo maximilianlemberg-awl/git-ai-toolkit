@@ -5,6 +5,8 @@ import subprocess
 import openai
 import json
 import sys
+import argparse
+import time
 from colorama import Fore, Style, init
 
 # Initialize colorama
@@ -16,6 +18,35 @@ try:
 except Exception:
     client = None
 
+# Progress indicators
+class Spinner:
+    """Simple spinner for showing progress during long-running operations."""
+    def __init__(self, message="Working", delay=0.1):
+        self.spinner_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+        self.message = message
+        self.delay = delay
+        self.running = False
+        self.spinner_index = 0
+        
+    def start(self):
+        self.running = True
+        print(f"\r{Fore.YELLOW}{self.message} {self.spinner_chars[0]}", end="")
+        self.spinner_index = 0
+        
+    def update(self):
+        if not self.running:
+            return
+        self.spinner_index = (self.spinner_index + 1) % len(self.spinner_chars)
+        print(f"\r{Fore.YELLOW}{self.message} {self.spinner_chars[self.spinner_index]}", end="")
+        sys.stdout.flush()
+        time.sleep(self.delay)
+        
+    def stop(self, success=True, message=None):
+        self.running = False
+        icon = f"{Fore.GREEN}✓" if success else f"{Fore.RED}✗"
+        final_message = message if message else self.message
+        print(f"\r{icon} {final_message}{' ' * 20}")
+
 def find_git_root():
     """Find the root directory of the Git repository."""
     current_dir = os.getcwd()
@@ -23,58 +54,92 @@ def find_git_root():
         if '.git' in os.listdir(current_dir):
             return current_dir
         current_dir = os.path.dirname(current_dir)
-    print(f"{Fore.RED}No Git repository found.")
+    print(f"{Fore.RED}✗ No Git repository found in current directory or its parents.")
     return None
 
 def get_repository_context(repo_path):
     """Get contextual information about the repository and its changes."""
-    # Get current branch name
-    branch_result = subprocess.run(['git', '-C', repo_path, 'branch', '--show-current'], 
-                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    current_branch = branch_result.stdout.decode('utf-8').strip() if branch_result.returncode == 0 else "unknown"
+    spinner = Spinner("Analyzing repository context")
+    spinner.start()
     
-    # Get file statistics for better context
-    stats_result = subprocess.run(['git', '-C', repo_path, 'diff', '--stat'], 
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stats = stats_result.stdout.decode('utf-8') if stats_result.returncode == 0 else ""
-    
-    # Get modified file types for context
-    files_result = subprocess.run(['git', '-C', repo_path, 'diff', '--name-only'], 
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    changed_files = files_result.stdout.decode('utf-8').splitlines() if files_result.returncode == 0 else []
-    
-    # Extract file extensions to understand languages/components being modified
-    file_types = {}
-    for file in changed_files:
-        ext = os.path.splitext(file)[1]
-        if ext:
-            file_types[ext] = file_types.get(ext, 0) + 1
-    
-    return {
-        "branch": current_branch,
-        "stats": stats,
-        "file_types": file_types,
-        "changed_files": changed_files
-    }
+    try:
+        # Get current branch name
+        branch_result = subprocess.run(['git', '-C', repo_path, 'branch', '--show-current'], 
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        current_branch = branch_result.stdout.decode('utf-8').strip() if branch_result.returncode == 0 else "unknown"
+        spinner.update()
+        
+        # Get file statistics for better context
+        stats_result = subprocess.run(['git', '-C', repo_path, 'diff', '--stat'], 
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stats = stats_result.stdout.decode('utf-8') if stats_result.returncode == 0 else ""
+        spinner.update()
+        
+        # Get modified file types for context
+        files_result = subprocess.run(['git', '-C', repo_path, 'diff', '--name-only'], 
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        changed_files = files_result.stdout.decode('utf-8').splitlines() if files_result.returncode == 0 else []
+        spinner.update()
+        
+        # Extract file extensions to understand languages/components being modified
+        file_types = {}
+        for file in changed_files:
+            ext = os.path.splitext(file)[1]
+            if ext:
+                file_types[ext] = file_types.get(ext, 0) + 1
+        
+        result = {
+            "branch": current_branch,
+            "stats": stats,
+            "file_types": file_types,
+            "changed_files": changed_files
+        }
+        
+        spinner.stop(True, "Repository context analyzed")
+        return result
+    except Exception as e:
+        spinner.stop(False, f"Failed to analyze repository context: {e}")
+        return {
+            "branch": "unknown",
+            "stats": "",
+            "file_types": {},
+            "changed_files": []
+        }
 
 def get_git_changes(repo_path):
     """Get comprehensive diff information including both staged and unstaged changes."""
-    # Get unstaged changes
-    unstaged_result = subprocess.run(['git', '-C', repo_path, 'diff'], 
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    unstaged = unstaged_result.stdout.decode('utf-8') if unstaged_result.returncode == 0 else ""
+    spinner = Spinner("Collecting Git changes")
+    spinner.start()
     
-    # Get staged changes
-    staged_result = subprocess.run(['git', '-C', repo_path, 'diff', '--staged'], 
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    staged = staged_result.stdout.decode('utf-8') if staged_result.returncode == 0 else ""
-    
-    return {
-        "unstaged": unstaged,
-        "staged": staged,
-        "has_unstaged": bool(unstaged.strip()),
-        "has_staged": bool(staged.strip())
-    }
+    try:
+        # Get unstaged changes
+        unstaged_result = subprocess.run(['git', '-C', repo_path, 'diff'], 
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        unstaged = unstaged_result.stdout.decode('utf-8') if unstaged_result.returncode == 0 else ""
+        spinner.update()
+        
+        # Get staged changes
+        staged_result = subprocess.run(['git', '-C', repo_path, 'diff', '--staged'], 
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        staged = staged_result.stdout.decode('utf-8') if staged_result.returncode == 0 else ""
+        
+        result = {
+            "unstaged": unstaged,
+            "staged": staged,
+            "has_unstaged": bool(unstaged.strip()),
+            "has_staged": bool(staged.strip())
+        }
+        
+        spinner.stop(True, "Git changes collected")
+        return result
+    except Exception as e:
+        spinner.stop(False, f"Failed to collect Git changes: {e}")
+        return {
+            "unstaged": "",
+            "staged": "",
+            "has_unstaged": False,
+            "has_staged": False
+        }
 
 def create_diff_prompt(context, changes):
     """Create a comprehensive, context-rich prompt for the AI model."""
@@ -141,6 +206,9 @@ permissions for different user types.
 
 def summarize_diff(user_prompt, system_prompt):
     """Generate a commit message using the OpenAI API."""
+    spinner = Spinner("Generating commit message with AI")
+    spinner.start()
+    
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -151,27 +219,57 @@ def summarize_diff(user_prompt, system_prompt):
             max_tokens=300
         )
         summary = response.choices[0].message.content
+        spinner.stop(True, "Commit message generated")
         return summary
     except openai.APIConnectionError:
-        print(f"{Fore.RED}Error: Unable to connect to the OpenAI API. Please check your network connection.")
+        spinner.stop(False, "Connection error")
+        print(f"{Fore.RED}✗ Unable to connect to the OpenAI API.")
+        print(f"{Fore.YELLOW}  → Please check your network connection")
+        print(f"{Fore.YELLOW}  → Try again or run with '--offline' to manually write your commit")
     except openai.AuthenticationError:
-        print(f"{Fore.RED}Error: Authentication failed. Please check your API key.")
+        spinner.stop(False, "Authentication error")
+        print(f"{Fore.RED}✗ Authentication failed with OpenAI.")
+        print(f"{Fore.YELLOW}  → Your API key appears to be invalid")
+        print(f"{Fore.YELLOW}  → Run 'gitai-setup' to update your API key")
     except openai.BadRequestError as e:
-        print(f"{Fore.RED}Error: Bad request - {e}. Please check the request parameters.")
+        spinner.stop(False, "Invalid request")
+        print(f"{Fore.RED}✗ Bad request to OpenAI API: {e}")
+        print(f"{Fore.YELLOW}  → This might be due to an issue with the request parameters")
+        print(f"{Fore.YELLOW}  → Try again with smaller changes or run with '--debug' for details")
     except openai.ConflictError:
-        print(f"{Fore.RED}Error: Conflict detected. The resource may have been updated by another request.")
+        spinner.stop(False, "API conflict")
+        print(f"{Fore.RED}✗ Conflict detected with OpenAI API.")
+        print(f"{Fore.YELLOW}  → The resource may have been updated by another request")
+        print(f"{Fore.YELLOW}  → Please try again")
     except openai.InternalServerError:
-        print(f"{Fore.RED}Error: Internal server error. Please try again later.")
+        spinner.stop(False, "OpenAI server error")
+        print(f"{Fore.RED}✗ OpenAI internal server error.")
+        print(f"{Fore.YELLOW}  → This is an issue on OpenAI's end")
+        print(f"{Fore.YELLOW}  → Please try again later or use '--offline' mode")
     except openai.NotFoundError:
-        print(f"{Fore.RED}Error: The requested resource was not found.")
+        spinner.stop(False, "Resource not found")
+        print(f"{Fore.RED}✗ OpenAI resource not found.")
+        print(f"{Fore.YELLOW}  → The requested resource was not found")
+        print(f"{Fore.YELLOW}  → Check if you're using a valid model ID")
     except openai.PermissionDeniedError:
-        print(f"{Fore.RED}Error: Permission denied. You do not have access to the requested resource.")
+        spinner.stop(False, "Permission denied")
+        print(f"{Fore.RED}✗ Permission denied for OpenAI API.")
+        print(f"{Fore.YELLOW}  → Your account may not have access to the requested model")
+        print(f"{Fore.YELLOW}  → Check your account tier at platform.openai.com")
     except openai.RateLimitError:
-        print(f"{Fore.RED}Error: Rate limit exceeded. Please pace your requests.")
+        spinner.stop(False, "Rate limit exceeded")
+        print(f"{Fore.RED}✗ OpenAI API rate limit exceeded.")
+        print(f"{Fore.YELLOW}  → You've hit your rate limit or quota")
+        print(f"{Fore.YELLOW}  → Wait a minute before retrying or check your usage limits")
     except openai.UnprocessableEntityError:
-        print(f"{Fore.RED}Error: The request could not be processed. Please try again.")
+        spinner.stop(False, "Unprocessable request")
+        print(f"{Fore.RED}✗ OpenAI could not process the request.")
+        print(f"{Fore.YELLOW}  → The request format may be invalid")
+        print(f"{Fore.YELLOW}  → Try again with a simplified diff or smaller changes")
     except Exception as e:
-        print(f"{Fore.RED}An unexpected error occurred: {e}")
+        spinner.stop(False, "Error generating message")
+        print(f"{Fore.RED}✗ An unexpected error occurred: {e}")
+        print(f"{Fore.YELLOW}  → Try again or use '--offline' mode to write your commit manually")
     return None
 
 def parse_commit_message(message):
@@ -229,6 +327,9 @@ def format_commit_display(parsed_commit):
 
 def load_project_conventions(repo_path):
     """Load project-specific conventions from config or learn from commit history."""
+    spinner = Spinner("Loading project conventions")
+    spinner.start()
+    
     # Try to load config file if exists
     config_path = os.path.join(repo_path, '.git-ai-config.json')
     config = {
@@ -242,8 +343,10 @@ def load_project_conventions(repo_path):
             with open(config_path, 'r') as f:
                 user_config = json.load(f)
                 config.update(user_config)
+                spinner.update()
         except Exception as e:
-            print(f"{Fore.YELLOW}Warning: Could not load config: {e}")
+            spinner.update()
+            print(f"{Fore.YELLOW}⚠ Could not load config: {e}")
     
     # Learn from commit history
     try:
@@ -252,6 +355,8 @@ def load_project_conventions(repo_path):
             ['git', '-C', repo_path, 'log', '-15', '--pretty=format:%s'],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
+        spinner.update()
+        
         if result.returncode == 0:
             history = result.stdout.decode('utf-8').splitlines()
             
@@ -286,8 +391,10 @@ def load_project_conventions(repo_path):
             config["common_types"] = [t for t, c in sorted(type_counts.items(), key=lambda x: x[1], reverse=True)[:3]]
             
     except Exception as e:
-        print(f"{Fore.YELLOW}Warning: Could not analyze commit history: {e}")
+        spinner.update()
+        print(f"{Fore.YELLOW}⚠ Could not analyze commit history: {e}")
     
+    spinner.stop(True, "Project conventions loaded")
     return config
 
 def stage_specific_files(repo_path, files=None):
@@ -300,35 +407,64 @@ def stage_specific_files(repo_path, files=None):
             files = result.stdout.decode('utf-8').splitlines()
     
     if not files:
-        print(f"{Fore.YELLOW}No files to stage.")
+        print(f"{Fore.YELLOW}⚠ No files to stage.")
         return False
     
     # Display files that can be staged
-    print(f"{Fore.CYAN}Files with changes:")
-    for i, file in enumerate(files, 1):
-        print(f"{i}. {file}")
+    print(f"\n{Fore.CYAN}╭─{'─' * 48}╮")
+    print(f"{Fore.CYAN}│ {Style.BRIGHT}Files with changes{' ' * 31}│")
+    print(f"{Fore.CYAN}├─{'─' * 48}┤")
     
-    print(f"\n{Fore.CYAN}Enter file numbers to stage (comma-separated, 'a' for all, or 'q' to cancel): ", end="")
+    for i, file in enumerate(files, 1):
+        # Truncate filename if too long
+        display_file = file
+        if len(file) > 45:
+            display_file = "..." + file[-42:]
+        print(f"{Fore.CYAN}│ {Fore.WHITE}{i}. {display_file}{' ' * (47 - len(display_file) - len(str(i)))}│")
+    
+    print(f"{Fore.CYAN}╰─{'─' * 48}╯")
+    
+    print(f"\n{Fore.CYAN}Enter file numbers to stage (comma-separated, 'a' for all, or 'q' to cancel):")
+    print(f"{Fore.WHITE}> ", end="")
     selection = input().strip().lower()
     
     if selection == 'q':
+        print(f"{Fore.YELLOW}⚠ Staging cancelled.")
         return False
     elif selection == 'a':
         # Stage all files
+        spinner = Spinner("Staging all files")
+        spinner.start()
         subprocess.run(['git', '-C', repo_path, 'add', '-A'])
-        print(f"{Fore.GREEN}All files staged.")
+        spinner.stop(True, "All files staged successfully")
         return True
     else:
         try:
             # Stage selected files
             selected_indices = [int(idx.strip()) - 1 for idx in selection.split(',') if idx.strip()]
+            if not selected_indices:
+                print(f"{Fore.RED}✗ No valid selection made.")
+                return False
+                
+            spinner = Spinner("Staging selected files")
+            spinner.start()
+            
+            staged_count = 0
             for idx in selected_indices:
                 if 0 <= idx < len(files):
                     subprocess.run(['git', '-C', repo_path, 'add', files[idx]])
-                    print(f"{Fore.GREEN}Staged: {files[idx]}")
-            return True
+                    staged_count += 1
+                    spinner.update()
+            
+            if staged_count > 0:
+                spinner.stop(True, f"{staged_count} file{'s' if staged_count != 1 else ''} staged successfully")
+                return True
+            else:
+                spinner.stop(False, "No files were staged")
+                return False
         except Exception as e:
-            print(f"{Fore.RED}Error parsing selection: {e}")
+            print(f"{Fore.RED}✗ Error parsing selection: {e}")
+            print(f"{Fore.YELLOW}  → Please enter comma-separated numbers (e.g., 1,3,5)")
             return False
 
 def generate_extended_description(diff_text):
@@ -336,6 +472,9 @@ def generate_extended_description(diff_text):
     if not diff_text or len(diff_text) < 500:  # Only for substantial changes
         return None
         
+    spinner = Spinner("Generating extended description")
+    spinner.start()
+    
     prompt = f"""Analyze this diff and generate an extended commit description:
 
 {diff_text[:4000]}  # Limit to avoid token issues
@@ -356,16 +495,19 @@ Focus on:
             ],
             max_tokens=250
         )
-        return response.choices[0].message.content
+        result = response.choices[0].message.content
+        spinner.stop(True, "Extended description generated")
+        return result
     except Exception as e:
-        print(f"{Fore.YELLOW}Could not generate extended description: {e}")
+        spinner.stop(False, f"Could not generate extended description")
+        print(f"{Fore.YELLOW}⚠ Error generating extended description: {e}")
         return None
 
 def check_api_key():
     """Check if the OpenAI API key is properly set and guide the user to set it up if not."""
     if not os.environ.get("OPENAI_API_KEY"):
-        print(f"{Fore.RED}❌ OpenAI API key is not set in your environment variables.")
-        print(f"{Fore.YELLOW}You can set up your API key by running: {Fore.WHITE}ai-setup")
+        print(f"{Fore.RED}✗ OpenAI API key is not set in your environment variables.")
+        print(f"{Fore.YELLOW}  → You can set up your API key by running: {Fore.WHITE}gitai-setup")
         choice = input(f"{Fore.CYAN}Would you like to run the setup now? (y/n): ").strip().lower()
         if choice == 'y':
             try:
@@ -378,15 +520,100 @@ def check_api_key():
                 else:
                     return False
             except ImportError:
-                print(f"{Fore.RED}Setup module not found. Try running {Fore.WHITE}ai-setup{Fore.RED} manually.")
+                print(f"{Fore.RED}✗ Setup module not found.")
+                print(f"{Fore.YELLOW}  → Try running {Fore.WHITE}gitai-setup{Fore.YELLOW} manually")
                 return False
         else:
             return False
     return True
 
+def create_parser():
+    """Create argument parser for CLI."""
+    parser = argparse.ArgumentParser(
+        description="Generate AI-powered Git commit messages and streamline your Git workflow.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  gitai                    # Generate commit message for all changes
+  gitai --stage            # Stage all changes and generate commit
+  gitai --offline          # Skip AI generation and write manually
+  gitai --push             # Automatically push after committing
+  gitai --model gpt-4o     # Use a specific OpenAI model
+  
+For more information, visit: https://github.com/maximilianlemberg-awl/git-ai-toolkit
+"""
+    )
+    
+    # Main options
+    parser.add_argument("--stage", "-s", action="store_true", 
+                        help="Stage all unstaged files before generating commit")
+    parser.add_argument("--push", "-p", action="store_true", 
+                        help="Push changes after committing")
+    parser.add_argument("--offline", "-o", action="store_true", 
+                        help="Skip AI generation and craft commit message manually")
+    
+    # Advanced options
+    advanced = parser.add_argument_group("Advanced options")
+    advanced.add_argument("--model", "-m", type=str, default="gpt-4o-mini",
+                        help="OpenAI model to use (default: gpt-4o-mini)")
+    advanced.add_argument("--max-tokens", type=int, default=300,
+                        help="Maximum tokens for AI response (default: 300)")
+    advanced.add_argument("--debug", action="store_true",
+                        help="Show detailed debug information")
+    advanced.add_argument("--version", "-v", action="store_true",
+                        help="Show version information and exit")
+    
+    return parser
+
+def print_version():
+    """Print version information."""
+    print(f"{Fore.CYAN}Git AI Toolkit v0.2.3")
+    print(f"{Fore.WHITE}A toolkit for using OpenAI models to assist with Git workflows")
+    print(f"{Fore.WHITE}https://github.com/maximilianlemberg-awl/git-ai-toolkit")
+
+def create_commit_manual():
+    """Create a commit message manually when in offline mode."""
+    print(f"\n{Fore.CYAN}╭─{'─' * 48}╮")
+    print(f"{Fore.CYAN}│ {Style.BRIGHT}Manual Commit Message{' ' * 29}│")
+    print(f"{Fore.CYAN}╰─{'─' * 48}╯")
+    
+    print(f"{Fore.YELLOW}Enter commit subject (first line, max 50 chars):")
+    print(f"{Fore.WHITE}> ", end="")
+    subject = input().strip()
+    
+    print(f"\n{Fore.YELLOW}Enter commit body (optional, press Enter on empty line to finish):")
+    body_lines = []
+    while True:
+        print(f"{Fore.WHITE}> ", end="")
+        line = input().rstrip()
+        if not line:
+            break
+        body_lines.append(line)
+    
+    body = "\n".join(body_lines)
+    full_message = subject
+    if body:
+        full_message += f"\n\n{body}"
+    
+    return {
+        "subject": subject,
+        "body": body,
+        "type": subject.split(':', 1)[0] if ':' in subject else "unknown",
+        "full_message": full_message
+    }
+
 def main():
-    # Check for API key configuration
-    if not check_api_key():
+    # Parse command line arguments
+    parser = create_parser()
+    args = parser.parse_args()
+    
+    # Handle version flag
+    if args.version:
+        print_version()
+        return
+    
+    # Check for API key configuration (skip if offline mode)
+    if not args.offline and not check_api_key():
         return
     
     # Find git repository
@@ -400,64 +627,147 @@ def main():
     
     # Verify we have changes to commit
     if not changes["has_staged"] and not changes["has_unstaged"]:
-        print(f"{Fore.YELLOW}No changes detected in the repository.")
+        print(f"{Fore.YELLOW}⚠ No changes detected in the repository.")
+        print(f"{Fore.YELLOW}  → First make some changes before running gitai")
         return
     
+    # Auto-stage changes if requested
+    if args.stage and changes["has_unstaged"]:
+        print(f"{Fore.CYAN}Auto-staging all changes as requested...")
+        subprocess.run(['git', '-C', repo_path, 'add', '-A'])
+        # Refresh changes after staging
+        changes = get_git_changes(repo_path)
+        print(f"{Fore.GREEN}✓ All changes staged successfully")
+    
     # Allow user to stage specific files if needed
-    if changes["has_unstaged"] and not changes["has_staged"]:
-        print(f"{Fore.CYAN}You have unstaged changes. Would you like to stage them? (y/n): ", end="")
+    if changes["has_unstaged"] and not changes["has_staged"] and not args.offline:
+        print(f"{Fore.CYAN}You have unstaged changes but nothing is staged yet.")
+        print(f"{Fore.CYAN}Would you like to stage changes now? (y/n): ", end="")
         if input().strip().lower() == 'y':
             stage_specific_files(repo_path)
             # Refresh changes after staging
             changes = get_git_changes(repo_path)
     
-    # Create diff content
-    diff_prompt = create_diff_prompt(repo_context, changes)
-    if not diff_prompt:
-        print(f"{Fore.RED}No diff content to analyze.")
-        return
+    # Ensure we have staged changes to commit
+    if not changes["has_staged"]:
+        if args.offline:
+            print(f"{Fore.YELLOW}⚠ No staged changes. You need to stage some changes first.")
+            print(f"{Fore.CYAN}Would you like to stage all changes? (y/n): ", end="")
+            if input().strip().lower() == 'y':
+                subprocess.run(['git', '-C', repo_path, 'add', '-A'])
+                # Refresh changes
+                changes = get_git_changes(repo_path)
+            else:
+                print(f"{Fore.RED}✗ Cannot proceed without staged changes.")
+                return
+        else:
+            print(f"{Fore.YELLOW}⚠ No staged changes. You need to stage some changes first.")
+            print(f"{Fore.YELLOW}  → Use 'git add <files>' to stage specific files")
+            print(f"{Fore.YELLOW}  → Or use 'gitai --stage' to automatically stage all changes")
+            return
     
-    # Load project conventions
-    conventions = load_project_conventions(repo_path)
-    
-    # Generate commit message
-    system_prompt, user_prompt = diff_prompt
-    print(f"{Fore.YELLOW}Generating commit message...")
-    
-    summary = summarize_diff(user_prompt, system_prompt)
-    if summary is None:
-        return
-    
-    # Parse and format the generated message
-    parsed_commit = parse_commit_message(summary)
-    formatted_display = format_commit_display(parsed_commit)
-    
-    # Generate extended description for complex changes
-    combined_diff = changes["staged"] + changes["unstaged"]
-    if len(combined_diff) > 1000:  # Only for substantial changes
-        extended_desc = generate_extended_description(combined_diff)
-        if extended_desc and not parsed_commit["body"]:
-            parsed_commit["body"] = extended_desc
-            parsed_commit["full_message"] = f"{parsed_commit['subject']}\n\n{extended_desc}"
+    # Use manual mode or AI generation
+    if args.offline:
+        parsed_commit = create_commit_manual()
+        formatted_display = format_commit_display(parsed_commit)
+    else:
+        # Load project conventions
+        conventions = load_project_conventions(repo_path)
+        
+        # Create diff content
+        diff_prompt = create_diff_prompt(repo_context, changes)
+        if not diff_prompt:
+            print(f"{Fore.RED}✗ No diff content to analyze.")
+            return
+        
+        # Generate commit message
+        system_prompt, user_prompt = diff_prompt
+        
+        # Show debug information if requested
+        if args.debug:
+            print(f"\n{Fore.CYAN}╭─{'─' * 48}╮")
+            print(f"{Fore.CYAN}│ {Style.BRIGHT}Debug Information{' ' * 31}│")
+            print(f"{Fore.CYAN}╰─{'─' * 48}╯")
+            print(f"{Fore.CYAN}Repository: {repo_path}")
+            print(f"{Fore.CYAN}Branch: {repo_context['branch']}")
+            print(f"{Fore.CYAN}Files changed: {len(repo_context['changed_files'])}")
+            print(f"{Fore.CYAN}Model: {args.model}")
+            print(f"{Fore.CYAN}Max tokens: {args.max_tokens}")
+        
+        summary = summarize_diff(user_prompt, system_prompt)
+        if summary is None:
+            # Offer to switch to offline mode
+            print(f"{Fore.CYAN}Would you like to switch to offline mode and write manually? (y/n): ", end="")
+            if input().strip().lower() == 'y':
+                parsed_commit = create_commit_manual()
+                formatted_display = format_commit_display(parsed_commit)
+            else:
+                return
+        else:
+            # Parse and format the generated message
+            parsed_commit = parse_commit_message(summary)
+            formatted_display = format_commit_display(parsed_commit)
+            
+            # Generate extended description for complex changes
+            combined_diff = changes["staged"] + changes["unstaged"]
+            if len(combined_diff) > 1000 and not parsed_commit["body"]:  # Only for substantial changes without existing body
+                print(f"{Fore.YELLOW}Generating extended description for complex changes...")
+                extended_desc = generate_extended_description(combined_diff)
+                if extended_desc:
+                    parsed_commit["body"] = extended_desc
+                    parsed_commit["full_message"] = f"{parsed_commit['subject']}\n\n{extended_desc}"
+                    formatted_display = format_commit_display(parsed_commit)
     
     # Display the suggestion
-    print(f"\n{Fore.GREEN}Suggested commit message:\n\n{formatted_display}\n")
+    print(f"\n{Fore.CYAN}╭─{'─' * 48}╮")
+    print(f"{Fore.CYAN}│ {Style.BRIGHT}Commit Message{' ' * 35}│")
+    print(f"{Fore.CYAN}╰─{'─' * 48}╯")
+    
+    # Display with highlighting for length guidance
+    subject = parsed_commit['subject']
+    if len(subject) > 50:
+        subject_display = f"{subject[:50]}{Fore.RED}{Style.BRIGHT}{subject[50:]}"
+    else:
+        subject_display = subject
+    
+    print(f"\n{subject_display}")
+    
+    if parsed_commit["body"]:
+        print(f"\n{parsed_commit['body']}")
+    
+    print("\n")
+    
+    # Show character count for subject line
+    subject_len = len(parsed_commit['subject'])
+    subject_status = f"{Fore.GREEN}✓" if subject_len <= 50 else f"{Fore.RED}✗"
+    print(f"{subject_status} Subject line: {subject_len}/50 characters")
     
     # Prompt user for confirmation or edits
-    print(f"{Fore.CYAN}Options:")
-    print(f"  y - Accept and commit")
-    print(f"  e - Edit message before committing")
-    print(f"  n - Cancel")
-    choice = input(f"{Fore.CYAN}Your choice: ").strip().lower()
+    print(f"\n{Fore.CYAN}╭─{'─' * 48}╮")
+    print(f"{Fore.CYAN}│ {Style.BRIGHT}Options{' ' * 41}│")
+    print(f"{Fore.CYAN}├─{'─' * 48}┤")
+    print(f"{Fore.CYAN}│ {Fore.WHITE}y{Fore.CYAN} - Accept and commit{' ' * 29}│")
+    print(f"{Fore.CYAN}│ {Fore.WHITE}e{Fore.CYAN} - Edit message before committing{' ' * 19}│")
+    print(f"{Fore.CYAN}│ {Fore.WHITE}n{Fore.CYAN} - Cancel{' ' * 40}│")
+    print(f"{Fore.CYAN}╰─{'─' * 48}╯")
+    
+    print(f"{Fore.CYAN}Your choice: ", end="")
+    choice = input().strip().lower()
     
     if choice == 'e':
-        print(f"{Fore.CYAN}Edit the commit message (press Enter on an empty line to finish):")
-        subject = input(f"{Fore.WHITE}Subject: {Fore.GREEN}").strip() or parsed_commit["subject"]
+        print(f"\n{Fore.CYAN}╭─{'─' * 48}╮")
+        print(f"{Fore.CYAN}│ {Style.BRIGHT}Edit Commit Message{' ' * 31}│")
+        print(f"{Fore.CYAN}╰─{'─' * 48}╯")
         
+        print(f"{Fore.YELLOW}Enter subject line (max 50 chars recommended):")
+        print(f"{Fore.WHITE}> ", end="")
+        subject = input().strip() or parsed_commit["subject"]
+        
+        print(f"\n{Fore.YELLOW}Enter commit body (press Enter on empty line to finish):")
         body_lines = []
-        print(f"{Fore.WHITE}Body (empty line to finish):")
         while True:
-            line = input(f"{Fore.GREEN}").rstrip()
+            print(f"{Fore.WHITE}> ", end="")
+            line = input().rstrip()
             if not line:
                 break
             body_lines.append(line)
@@ -468,15 +778,20 @@ def main():
             commit_message += f"\n\n{body}"
         
         parsed_commit["full_message"] = commit_message
+        parsed_commit["subject"] = subject
+        parsed_commit["body"] = body
         
     if choice in ('y', 'e'):
-        # Stage any remaining files if needed
-        if changes["has_unstaged"]:
-            print(f"{Fore.YELLOW}Staging all changes...")
+        # Stage any remaining files if needed and explicitly requested
+        if changes["has_unstaged"] and args.stage:
+            spinner = Spinner("Staging remaining changes")
+            spinner.start()
             subprocess.run(['git', '-C', repo_path, 'add', '-A'])
+            spinner.stop(True, "All changes staged")
         
         # Commit changes
-        print(f"{Fore.YELLOW}Committing changes...")
+        spinner = Spinner("Creating commit")
+        spinner.start()
         commit_result = subprocess.run(
             ['git', '-C', repo_path, 'commit', '-m', parsed_commit["full_message"]],
             stdout=subprocess.PIPE,
@@ -484,24 +799,64 @@ def main():
         )
         
         if commit_result.returncode == 0:
-            print(f"{Fore.GREEN}✅ Changes committed successfully.")
+            # Get the commit hash for display
+            hash_result = subprocess.run(
+                ['git', '-C', repo_path, 'rev-parse', '--short', 'HEAD'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            commit_hash = hash_result.stdout.decode('utf-8').strip() if hash_result.returncode == 0 else "unknown"
             
-            # Offer to push
-            push_choice = input(f"{Fore.CYAN}Push changes to remote? (y/n): ").strip().lower()
-            if push_choice == 'y':
-                print(f"{Fore.YELLOW}Pushing changes...")
+            spinner.stop(True, f"Commit created successfully [{commit_hash}]")
+            
+            # Push if requested or prompt
+            should_push = args.push
+            if not should_push:
+                print(f"{Fore.CYAN}Push changes to remote? (y/n): ", end="")
+                should_push = input().strip().lower() == 'y'
+            
+            if should_push:
+                spinner = Spinner("Pushing changes to remote")
+                spinner.start()
                 push_result = subprocess.run(['git', '-C', repo_path, 'push'], 
                                            stdout=subprocess.PIPE, 
                                            stderr=subprocess.PIPE)
                 
                 if push_result.returncode == 0:
-                    print(f"{Fore.GREEN}✅ Changes pushed successfully.")
+                    spinner.stop(True, "Changes pushed successfully")
+                    
+                    # Suggest next steps
+                    print(f"\n{Fore.CYAN}╭─{'─' * 48}╮")
+                    print(f"{Fore.CYAN}│ {Style.BRIGHT}Next Steps{' ' * 38}│")
+                    print(f"{Fore.CYAN}╰─{'─' * 48}╯")
+                    print(f"{Fore.GREEN}✓ Changes committed and pushed!")
+                    print(f"{Fore.YELLOW}  → Create a pull request: git request-pull")
+                    print(f"{Fore.YELLOW}  → Continue working on another task")
                 else:
-                    print(f"{Fore.RED}❌ Push failed: {push_result.stderr.decode('utf-8')}")
+                    spinner.stop(False, "Push failed")
+                    print(f"{Fore.RED}✗ Push failed: {push_result.stderr.decode('utf-8')}")
+                    print(f"{Fore.YELLOW}  → You can push later with: git push")
+            else:
+                # Suggest next steps when not pushing
+                print(f"\n{Fore.CYAN}╭─{'─' * 48}╮")
+                print(f"{Fore.CYAN}│ {Style.BRIGHT}Next Steps{' ' * 38}│")
+                print(f"{Fore.CYAN}╰─{'─' * 48}╯")
+                print(f"{Fore.GREEN}✓ Changes committed locally!")
+                print(f"{Fore.YELLOW}  → Push your changes: git push")
+                print(f"{Fore.YELLOW}  → Continue making more changes")
         else:
-            print(f"{Fore.RED}❌ Commit failed: {commit_result.stderr.decode('utf-8')}")
+            spinner.stop(False, "Commit failed")
+            print(f"{Fore.RED}✗ Commit failed: {commit_result.stderr.decode('utf-8')}")
+            print(f"{Fore.YELLOW}  → Check if you need to resolve conflicts")
+            print(f"{Fore.YELLOW}  → Ensure all files are properly staged")
     else:
-        print(f"{Fore.RED}❌ Commit canceled.")
+        print(f"{Fore.RED}✗ Operation cancelled.")
+        print(f"{Fore.YELLOW}  → Your changes are still staged and ready to commit")
+        print(f"{Fore.YELLOW}  → Run 'gitai' again when you're ready")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print(f"\n{Fore.RED}✗ Operation cancelled by user (Ctrl+C).")
+        sys.exit(1)
