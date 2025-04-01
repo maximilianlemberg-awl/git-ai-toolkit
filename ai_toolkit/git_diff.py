@@ -564,7 +564,7 @@ def check_api_key():
     if not os.environ.get("OPENAI_API_KEY"):
         print(f"{Fore.RED}✗ OpenAI API key is not set in your environment variables.")
         print(f"{Fore.YELLOW}  → You can set up your API key by running: {Fore.WHITE}gitai-setup")
-        choice = input(f"{Fore.CYAN}Would you like to run the setup now? (y/n): ").strip().lower()
+        choice = input(f"{Fore.CYAN}Would you like to run the setup now? [y/n]: ").strip().lower()
         if choice == 'y':
             try:
                 from ai_toolkit.setup import setup_api_key
@@ -696,7 +696,7 @@ def main():
     # Allow user to stage specific files if needed
     if changes["has_unstaged"] and not changes["has_staged"] and not args.offline:
         print(f"{Fore.CYAN}You have unstaged changes but nothing is staged yet.")
-        print(f"{Fore.CYAN}Would you like to stage changes now? (Y/n): ", end="")
+        print(f"{Fore.CYAN}Would you like to stage changes now? [Y/n]: ", end="")
         response = input().strip().lower()
         if response == '' or response == 'y':
             stage_specific_files(repo_path)
@@ -707,7 +707,7 @@ def main():
     if not changes["has_staged"]:
         if args.offline:
             print(f"{Fore.YELLOW}⚠ No staged changes. You need to stage some changes first.")
-            print(f"{Fore.CYAN}Would you like to stage all changes? (Y/n): ", end="")
+            print(f"{Fore.CYAN}Would you like to stage all changes? [Y/n]: ", end="")
             response = input().strip().lower()
             if response == '' or response == 'y':
                 subprocess.run(['git', '-C', repo_path, 'add', '-A'])
@@ -751,7 +751,7 @@ def main():
         summary = summarize_diff(user_prompt, system_prompt)
         if summary is None:
             # Offer to switch to offline mode
-            print(f"{Fore.CYAN}Would you like to switch to offline mode and write manually? (Y/n): ", end="")
+            print(f"{Fore.CYAN}Would you like to switch to offline mode and write manually? [Y/n]: ", end="")
             response = input().strip().lower()
             if response == '' or response == 'y':
                 parsed_commit = create_commit_manual()
@@ -803,7 +803,7 @@ def main():
     ]
     print("\n" + create_box("Options", options))
     
-    print(f"{Fore.CYAN}Your choice [y]: ", end="")
+    print(f"{Fore.CYAN}Your choice (Enter for [y]): ", end="")
     choice = input().strip().lower() or 'y'
     
     if choice == 'e':
@@ -862,7 +862,7 @@ def main():
             # Push if requested or prompt
             should_push = args.push
             if not should_push:
-                print(f"{Fore.CYAN}Push changes to remote? (Y/n): ", end="")
+                print(f"{Fore.CYAN}Push changes to remote? [Y/n]: ", end="")
                 response = input().strip().lower()
                 should_push = response == '' or response == 'y'
             

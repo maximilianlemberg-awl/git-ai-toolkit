@@ -109,7 +109,7 @@ def add_key_to_shell_config(api_key):
         if f"OPENAI_API_KEY" in content:
             spinner.stop(False, "API key already exists in config")
             print(f"{Fore.YELLOW}⚠ OpenAI API key already exists in {config_file}.")
-            print(f"{Fore.CYAN}Would you like to update it? (y/N): ", end="")
+            print(f"{Fore.CYAN}Would you like to update it? [y/N]: ", end="")
             choice = input().strip().lower()
             if choice != 'y':
                 return False
@@ -304,7 +304,7 @@ def setup_api_key(api_key=None, skip_validation=False):
     # Check if key is already set
     if check_openai_key_env() and api_key is None:
         print(f"{Fore.GREEN}✓ OpenAI API key is already set in your environment.")
-        print(f"{Fore.CYAN}Would you like to update it? (y/N): ", end="")
+        print(f"{Fore.CYAN}Would you like to update it? [y/N]: ", end="")
         choice = input().strip().lower()
         if choice != 'y':
             return True
@@ -335,7 +335,7 @@ def setup_api_key(api_key=None, skip_validation=False):
         key_works = test_openai_connection(api_key)
     
     if not key_works and not skip_validation:
-        print(f"{Fore.CYAN}Continue with setup anyway? (y/N): ", end="")
+        print(f"{Fore.CYAN}Continue with setup anyway? [y/N]: ", end="")
         choice = input().strip().lower()
         if choice != 'y':
             return False
