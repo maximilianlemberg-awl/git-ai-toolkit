@@ -24,6 +24,24 @@ pip install git_ai_toolkit
 
 ## ⚙️ Configuration
 
+### Option 1: Interactive Setup (Recommended)
+
+Run the interactive setup command that will guide you through the process of configuring your OpenAI API key:
+
+```sh
+gitai-setup
+```
+
+The setup will:
+1. Ask for your OpenAI API key
+2. Validate the key format
+3. Test the connection to the OpenAI API
+4. Add the key to your environment variables permanently
+
+### Option 2: Manual Setup
+
+If you prefer to set up the API key manually:
+
 1. **Add Your OpenAI API Key**
 
    Add your OpenAI API key to your environment variables by updating your shell's configuration file.
@@ -40,6 +58,12 @@ pip install git_ai_toolkit
    ```sh
    echo '\nexport OPENAI_API_KEY="your_openai_api_key_here"' >> ~/.bashrc
    source ~/.bashrc
+   ```
+
+   For `Windows` users:
+   
+   ```sh
+   setx OPENAI_API_KEY "your_openai_api_key_here"
    ```
 
    Replace `your_openai_api_key_here` with your actual OpenAI API key.
@@ -59,7 +83,7 @@ pip install git_ai_toolkit
     Execute the script using the command:
 
     ```sh
-    ai-commit
+    gitai
     ```
 
 3. **Follow the Prompts**

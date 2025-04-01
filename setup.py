@@ -15,7 +15,8 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'ai-commit=ai_toolkit.git_diff:main',
+            'gitai=ai_toolkit.git_diff:main',
+            'gitai-setup=ai_toolkit.setup:main',
         ],
     },
     classifiers=[

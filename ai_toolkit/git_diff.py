@@ -4,9 +4,17 @@ import os
 import subprocess
 import openai
 import json
-from colorama import Fore, Style
+import sys
+from colorama import Fore, Style, init
 
-client = openai.OpenAI()
+# Initialize colorama
+init(autoreset=True)
+
+# Initialize OpenAI client
+try:
+    client = openai.OpenAI()
+except Exception:
+    client = None
 
 def find_git_root():
     """Find the root directory of the Git repository."""
@@ -353,7 +361,34 @@ Focus on:
         print(f"{Fore.YELLOW}Could not generate extended description: {e}")
         return None
 
+def check_api_key():
+    """Check if the OpenAI API key is properly set and guide the user to set it up if not."""
+    if not os.environ.get("OPENAI_API_KEY"):
+        print(f"{Fore.RED}❌ OpenAI API key is not set in your environment variables.")
+        print(f"{Fore.YELLOW}You can set up your API key by running: {Fore.WHITE}ai-setup")
+        choice = input(f"{Fore.CYAN}Would you like to run the setup now? (y/n): ").strip().lower()
+        if choice == 'y':
+            try:
+                from ai_toolkit.setup import setup_api_key
+                if setup_api_key():
+                    # Reinitialize the client with the new key
+                    global client
+                    client = openai.OpenAI()
+                    return True
+                else:
+                    return False
+            except ImportError:
+                print(f"{Fore.RED}Setup module not found. Try running {Fore.WHITE}ai-setup{Fore.RED} manually.")
+                return False
+        else:
+            return False
+    return True
+
 def main():
+    # Check for API key configuration
+    if not check_api_key():
+        return
+    
     # Find git repository
     repo_path = find_git_root()
     if not repo_path:
