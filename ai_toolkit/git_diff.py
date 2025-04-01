@@ -27,22 +27,35 @@ class Spinner:
         self.delay = delay
         self.running = False
         self.spinner_index = 0
+        self._thread = None
         
     def start(self):
         self.running = True
-        print(f"\r{Fore.YELLOW}{self.message} {self.spinner_chars[0]}", end="")
         self.spinner_index = 0
+        print(f"\r{Fore.YELLOW}{self.message} {self.spinner_chars[0]}", end="")
+        sys.stdout.flush()
+        
+        # Start continuous spinning in a separate thread
+        import threading
+        def spin():
+            while self.running:
+                self.spinner_index = (self.spinner_index + 1) % len(self.spinner_chars)
+                print(f"\r{Fore.YELLOW}{self.message} {self.spinner_chars[self.spinner_index]}", end="")
+                sys.stdout.flush()
+                time.sleep(self.delay)
+        
+        self._thread = threading.Thread(target=spin)
+        self._thread.daemon = True
+        self._thread.start()
         
     def update(self):
-        if not self.running:
-            return
-        self.spinner_index = (self.spinner_index + 1) % len(self.spinner_chars)
-        print(f"\r{Fore.YELLOW}{self.message} {self.spinner_chars[self.spinner_index]}", end="")
-        sys.stdout.flush()
-        time.sleep(self.delay)
+        # No longer needed for spinning animation, but kept for compatibility
+        pass
         
     def stop(self, success=True, message=None):
         self.running = False
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=0.2)  # Wait for thread to finish
         icon = f"{Fore.GREEN}✓" if success else f"{Fore.RED}✗"
         final_message = message if message else self.message
         print(f"\r{icon} {final_message}{' ' * 20}")
@@ -301,6 +314,56 @@ def parse_commit_message(message):
         "full_message": message.strip()
     }
 
+def create_box(title, content_lines=None, min_width=48):
+    """Create a box with dynamic width based on content.
+    
+    Args:
+        title: The title text for the box
+        content_lines: List of content lines, or None for a title-only box
+        min_width: Minimum width of box
+    
+    Returns:
+        String representation of the box
+    """
+    import re
+    
+    # Helper function to strip ANSI color codes for width calculation
+    def strip_ansi(text):
+        # Remove all ANSI escape sequences (including colors)
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        return ansi_escape.sub('', text)
+    
+    title = str(title)
+    
+    # Calculate the maximum line width (excluding ANSI color codes)
+    title_display_width = len(strip_ansi(title))
+    content_width = 0
+    
+    if content_lines:
+        # Convert all content to strings
+        content_lines = [str(line) for line in content_lines]
+        # Find the maximum visible width (excluding color codes)
+        content_width = max(len(strip_ansi(line)) for line in content_lines)
+    
+    # Box should be at least as wide as the title (plus padding) or content
+    box_width = max(min_width, title_display_width + 4, content_width + 4)
+    
+    # Build the box
+    box = []
+    box.append(f"{Fore.CYAN}╭{'─' * (box_width - 2)}╮")
+    box.append(f"{Fore.CYAN}│ {Style.BRIGHT}{title}{' ' * (box_width - title_display_width - 3)}│")
+    
+    if content_lines:
+        box.append(f"{Fore.CYAN}├{'─' * (box_width - 2)}┤")
+        for line in content_lines:
+            line_display_width = len(strip_ansi(line))
+            padding = box_width - line_display_width - 3  # -3 for "│ " and "│"
+            box.append(f"{Fore.CYAN}│ {line}{' ' * padding}│")
+    
+    box.append(f"{Fore.CYAN}╰{'─' * (box_width - 2)}╯")
+    
+    return '\n'.join(box)
+
 def format_commit_display(parsed_commit):
     """Format the commit message for display with color-coding by type."""
     type_colors = {
@@ -411,18 +474,11 @@ def stage_specific_files(repo_path, files=None):
         return False
     
     # Display files that can be staged
-    print(f"\n{Fore.CYAN}╭─{'─' * 48}╮")
-    print(f"{Fore.CYAN}│ {Style.BRIGHT}Files with changes{' ' * 31}│")
-    print(f"{Fore.CYAN}├─{'─' * 48}┤")
-    
+    display_lines = []
     for i, file in enumerate(files, 1):
-        # Truncate filename if too long
-        display_file = file
-        if len(file) > 45:
-            display_file = "..." + file[-42:]
-        print(f"{Fore.CYAN}│ {Fore.WHITE}{i}. {display_file}{' ' * (47 - len(display_file) - len(str(i)))}│")
+        display_lines.append(f"{Fore.WHITE}{i}. {file}")
     
-    print(f"{Fore.CYAN}╰─{'─' * 48}╯")
+    print("\n" + create_box("Files with changes", display_lines))
     
     print(f"\n{Fore.CYAN}Enter file numbers to stage (comma-separated, 'a' for all, or 'q' to cancel):")
     print(f"{Fore.WHITE}> ", end="")
@@ -573,9 +629,7 @@ def print_version():
 
 def create_commit_manual():
     """Create a commit message manually when in offline mode."""
-    print(f"\n{Fore.CYAN}╭─{'─' * 48}╮")
-    print(f"{Fore.CYAN}│ {Style.BRIGHT}Manual Commit Message{' ' * 29}│")
-    print(f"{Fore.CYAN}╰─{'─' * 48}╯")
+    print("\n" + create_box("Manual Commit Message"))
     
     print(f"{Fore.YELLOW}Enter commit subject (first line, max 50 chars):")
     print(f"{Fore.WHITE}> ", end="")
@@ -685,9 +739,7 @@ def main():
         
         # Show debug information if requested
         if args.debug:
-            print(f"\n{Fore.CYAN}╭─{'─' * 48}╮")
-            print(f"{Fore.CYAN}│ {Style.BRIGHT}Debug Information{' ' * 31}│")
-            print(f"{Fore.CYAN}╰─{'─' * 48}╯")
+            print("\n" + create_box("Debug Information"))
             print(f"{Fore.CYAN}Repository: {repo_path}")
             print(f"{Fore.CYAN}Branch: {repo_context['branch']}")
             print(f"{Fore.CYAN}Files changed: {len(repo_context['changed_files'])}")
@@ -719,9 +771,7 @@ def main():
                     formatted_display = format_commit_display(parsed_commit)
     
     # Display the suggestion
-    print(f"\n{Fore.CYAN}╭─{'─' * 48}╮")
-    print(f"{Fore.CYAN}│ {Style.BRIGHT}Commit Message{' ' * 35}│")
-    print(f"{Fore.CYAN}╰─{'─' * 48}╯")
+    print("\n" + create_box("Commit Message"))
     
     # Display with highlighting for length guidance
     subject = parsed_commit['subject']
@@ -743,21 +793,18 @@ def main():
     print(f"{subject_status} Subject line: {subject_len}/50 characters")
     
     # Prompt user for confirmation or edits
-    print(f"\n{Fore.CYAN}╭─{'─' * 48}╮")
-    print(f"{Fore.CYAN}│ {Style.BRIGHT}Options{' ' * 41}│")
-    print(f"{Fore.CYAN}├─{'─' * 48}┤")
-    print(f"{Fore.CYAN}│ {Fore.WHITE}y{Fore.CYAN} - Accept and commit{' ' * 29}│")
-    print(f"{Fore.CYAN}│ {Fore.WHITE}e{Fore.CYAN} - Edit message before committing{' ' * 19}│")
-    print(f"{Fore.CYAN}│ {Fore.WHITE}n{Fore.CYAN} - Cancel{' ' * 40}│")
-    print(f"{Fore.CYAN}╰─{'─' * 48}╯")
+    options = [
+        f"{Fore.WHITE}y{Fore.CYAN} - Accept and commit",
+        f"{Fore.WHITE}e{Fore.CYAN} - Edit message before committing",
+        f"{Fore.WHITE}n{Fore.CYAN} - Cancel"
+    ]
+    print("\n" + create_box("Options", options))
     
     print(f"{Fore.CYAN}Your choice: ", end="")
     choice = input().strip().lower()
     
     if choice == 'e':
-        print(f"\n{Fore.CYAN}╭─{'─' * 48}╮")
-        print(f"{Fore.CYAN}│ {Style.BRIGHT}Edit Commit Message{' ' * 31}│")
-        print(f"{Fore.CYAN}╰─{'─' * 48}╯")
+        print("\n" + create_box("Edit Commit Message"))
         
         print(f"{Fore.YELLOW}Enter subject line (max 50 chars recommended):")
         print(f"{Fore.WHITE}> ", end="")
@@ -826,9 +873,7 @@ def main():
                     spinner.stop(True, "Changes pushed successfully")
                     
                     # Suggest next steps
-                    print(f"\n{Fore.CYAN}╭─{'─' * 48}╮")
-                    print(f"{Fore.CYAN}│ {Style.BRIGHT}Next Steps{' ' * 38}│")
-                    print(f"{Fore.CYAN}╰─{'─' * 48}╯")
+                    print("\n" + create_box("Next Steps"))
                     print(f"{Fore.GREEN}✓ Changes committed and pushed!")
                     print(f"{Fore.YELLOW}  → Create a pull request: git request-pull")
                     print(f"{Fore.YELLOW}  → Continue working on another task")
@@ -838,9 +883,7 @@ def main():
                     print(f"{Fore.YELLOW}  → You can push later with: git push")
             else:
                 # Suggest next steps when not pushing
-                print(f"\n{Fore.CYAN}╭─{'─' * 48}╮")
-                print(f"{Fore.CYAN}│ {Style.BRIGHT}Next Steps{' ' * 38}│")
-                print(f"{Fore.CYAN}╰─{'─' * 48}╯")
+                print("\n" + create_box("Next Steps"))
                 print(f"{Fore.GREEN}✓ Changes committed locally!")
                 print(f"{Fore.YELLOW}  → Push your changes: git push")
                 print(f"{Fore.YELLOW}  → Continue making more changes")

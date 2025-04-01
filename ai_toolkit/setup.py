@@ -21,22 +21,35 @@ class Spinner:
         self.delay = delay
         self.running = False
         self.spinner_index = 0
+        self._thread = None
         
     def start(self):
         self.running = True
-        print(f"\r{Fore.YELLOW}{self.message} {self.spinner_chars[0]}", end="")
         self.spinner_index = 0
+        print(f"\r{Fore.YELLOW}{self.message} {self.spinner_chars[0]}", end="")
+        sys.stdout.flush()
+        
+        # Start continuous spinning in a separate thread
+        import threading
+        def spin():
+            while self.running:
+                self.spinner_index = (self.spinner_index + 1) % len(self.spinner_chars)
+                print(f"\r{Fore.YELLOW}{self.message} {self.spinner_chars[self.spinner_index]}", end="")
+                sys.stdout.flush()
+                time.sleep(self.delay)
+        
+        self._thread = threading.Thread(target=spin)
+        self._thread.daemon = True
+        self._thread.start()
         
     def update(self):
-        if not self.running:
-            return
-        self.spinner_index = (self.spinner_index + 1) % len(self.spinner_chars)
-        print(f"\r{Fore.YELLOW}{self.message} {self.spinner_chars[self.spinner_index]}", end="")
-        sys.stdout.flush()
-        time.sleep(self.delay)
+        # No longer needed for spinning animation, but kept for compatibility
+        pass
         
     def stop(self, success=True, message=None):
         self.running = False
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=0.2)  # Wait for thread to finish
         icon = f"{Fore.GREEN}✓" if success else f"{Fore.RED}✗"
         final_message = message if message else self.message
         print(f"\r{icon} {final_message}{' ' * 20}")
@@ -76,9 +89,7 @@ def add_key_to_shell_config(api_key):
         spinner.stop(False, "Automatic configuration not supported")
         print(f"{Fore.YELLOW}⚠ Automatic configuration not supported for your shell.")
         print(f"{Fore.YELLOW}  → Please manually add the following to your shell configuration file:")
-        print(f"{Fore.CYAN}╭─{'─' * 48}╮")
-        print(f"{Fore.CYAN}│ {Style.BRIGHT}Add to your shell config file{' ' * 21}│")
-        print(f"{Fore.CYAN}╰─{'─' * 48}╯")
+        print(create_box("Add to your shell config file"))
         print(f"{Fore.GREEN}export OPENAI_API_KEY=\"{api_key}\"")
         return False
     
@@ -236,11 +247,59 @@ def print_version():
     print(f"{Fore.WHITE}A toolkit for using OpenAI models to assist with Git workflows")
     print(f"{Fore.WHITE}https://github.com/maximilianlemberg-awl/git-ai-toolkit")
 
+def create_box(title, content_lines=None, min_width=48):
+    """Create a box with dynamic width based on content.
+    
+    Args:
+        title: The title text for the box
+        content_lines: List of content lines, or None for a title-only box
+        min_width: Minimum width of box
+    
+    Returns:
+        String representation of the box
+    """
+    import re
+    
+    # Helper function to strip ANSI color codes for width calculation
+    def strip_ansi(text):
+        # Remove all ANSI escape sequences (including colors)
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        return ansi_escape.sub('', text)
+    
+    title = str(title)
+    
+    # Calculate the maximum line width (excluding ANSI color codes)
+    title_display_width = len(strip_ansi(title))
+    content_width = 0
+    
+    if content_lines:
+        # Convert all content to strings
+        content_lines = [str(line) for line in content_lines]
+        # Find the maximum visible width (excluding color codes)
+        content_width = max(len(strip_ansi(line)) for line in content_lines)
+    
+    # Box should be at least as wide as the title (plus padding) or content
+    box_width = max(min_width, title_display_width + 4, content_width + 4)
+    
+    # Build the box
+    box = []
+    box.append(f"{Fore.CYAN}╭{'─' * (box_width - 2)}╮")
+    box.append(f"{Fore.CYAN}│ {Style.BRIGHT}{title}{' ' * (box_width - title_display_width - 3)}│")
+    
+    if content_lines:
+        box.append(f"{Fore.CYAN}├{'─' * (box_width - 2)}┤")
+        for line in content_lines:
+            line_display_width = len(strip_ansi(line))
+            padding = box_width - line_display_width - 3  # -3 for "│ " and "│"
+            box.append(f"{Fore.CYAN}│ {line}{' ' * padding}│")
+    
+    box.append(f"{Fore.CYAN}╰{'─' * (box_width - 2)}╯")
+    
+    return '\n'.join(box)
+
 def setup_api_key(api_key=None, skip_validation=False):
     """Guide the user through setting up their OpenAI API key."""
-    print(f"{Fore.CYAN}╭─{'─' * 48}╮")
-    print(f"{Fore.CYAN}│ {Style.BRIGHT}Git AI Toolkit Setup{' ' * 30}│")
-    print(f"{Fore.CYAN}╰─{'─' * 48}╯")
+    print(create_box("Git AI Toolkit Setup"))
     
     # Check if key is already set
     if check_openai_key_env() and api_key is None:
@@ -289,9 +348,7 @@ def setup_api_key(api_key=None, skip_validation=False):
         success = add_key_to_shell_config(api_key)
     
     if success:
-        print(f"\n{Fore.CYAN}╭─{'─' * 48}╮")
-        print(f"{Fore.CYAN}│ {Style.BRIGHT}Setup Complete{' ' * 34}│")
-        print(f"{Fore.CYAN}╰─{'─' * 48}╯")
+        print("\n" + create_box("Setup Complete"))
         print(f"{Fore.GREEN}✓ API key has been configured successfully!")
         print(f"{Fore.YELLOW}➤ You can now use Git AI Toolkit commands:")
         print(f"{Fore.WHITE}  gitai               {Fore.CYAN}# Generate AI commit messages")
