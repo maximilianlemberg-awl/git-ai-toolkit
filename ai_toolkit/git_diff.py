@@ -903,8 +903,11 @@ def main():
                     print(f"{Fore.GREEN}✓ Changes committed and pushed!")
                     
                     if pr_url:
-                        # URL found, show it to the user
-                        print(f"{Fore.YELLOW}  → Create a pull request: {Fore.CYAN}{Style.BRIGHT}{pr_url}")
+                        # URL found, create a clickable terminal link
+                        # This uses the OSC 8 hyperlink escape sequence format supported by most modern terminals
+                        # Format: \033]8;;URL\007LINK_TEXT\033]8;;\007
+                        clickable_link = f"\033]8;;{pr_url}\007{pr_url}\033]8;;\007"
+                        print(f"{Fore.YELLOW}  → Create a pull request: {Fore.CYAN}{Style.BRIGHT}{clickable_link}")
                     else:
                         # Try to determine repository type
                         remote_info = subprocess.run(
