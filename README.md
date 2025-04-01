@@ -2,7 +2,17 @@
 
 ## 👋 Description
 
-This tool can generate commit messages for your Git repository by summarizing the changes using the OpenAI API. It identifies the Git repository, checks for changes using `git diff`, and uses OpenAI to provide a one-sentence summary of the changes. If you approve, the changes can be committed and optionally pushed to the remote repository.
+This tool can generate commit messages for your Git repository by summarizing the changes using the OpenAI API. It identifies the Git repository, checks for changes (both staged and unstaged), and uses OpenAI to provide a comprehensive commit message following conventional commit formats. If you approve, the changes can be committed and optionally pushed to the remote repository.
+
+### Enhanced Features
+
+- **Conventional Commit Format**: Uses standardized types (feat, fix, docs, etc.)
+- **Smart Context Gathering**: Analyzes branch, file types, and repository context
+- **Staged & Unstaged Changes**: Handles both types of changes with selective staging
+- **Interactive Editing**: Edit commit messages before finalizing
+- **Project-Specific Conventions**: Learns from your commit history
+- **Color-Coded Output**: Better visual organization of information
+- **Extended Description**: Auto-generates detailed descriptions for complex changes
 
 ## 🚀 Installation
 

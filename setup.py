@@ -1,15 +1,11 @@
 from setuptools import setup, find_packages
-import pathlib
-
-HERE = pathlib.Path(__file__).parent
-README = (HERE / "README.md").read_text()
 
 setup(
     name="git_ai_toolkit",
-    version="0.1.7",
+    version="0.2.3",
     description="A toolkit for using OpenAI's GPT-4o-mini model to assist with Git workflows.",
-    long_description=README,
-    long_description_content_type='text/markdown',
+    long_description=open("README.md").read(),
+    long_description_content_type="text/markdown",
     author="Maximilian Lemberg",
     url="https://github.com/maximilianlemberg-awl/git-ai-toolkit",
     packages=find_packages(),
@@ -28,4 +24,5 @@ setup(
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.9',
+    license="MIT",
 )
