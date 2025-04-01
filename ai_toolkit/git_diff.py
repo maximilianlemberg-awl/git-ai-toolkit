@@ -872,10 +872,54 @@ def main():
                 if push_result.returncode == 0:
                     spinner.stop(True, "Changes pushed successfully")
                     
+                    # Check if git host provided a URL for creating a pull request
+                    push_output = push_result.stdout.decode('utf-8') + push_result.stderr.decode('utf-8')
+                    pr_url = None
+                    
+                    # Look for pull request URL suggestions in the output (GitHub, GitLab, etc.)
+                    import re
+                    
+                    # Match various pull/merge request URL patterns
+                    # GitHub pattern: https://github.com/user/repo/pull/new/branch
+                    # GitLab pattern: https://gitlab.com/user/repo/-/merge_requests/new?merge_request...
+                    # Also match self-hosted instances with custom domains
+                    url_patterns = [
+                        # GitHub (including enterprise)
+                        r'https?://(?:github\.com|[^/]+/[^/]+)/[^/]+/[^/]+/pull/new/[^\s]+',
+                        # GitLab (including self-hosted)
+                        r'https?://(?:gitlab\.com|[^/]+)/[^/]+/[^/]+/-/merge_requests/new[^\s]*',
+                        # Generic URL that contains pull or merge request
+                        r'https?://[^\s]+(pull|merge)[^\s]+'
+                    ]
+                    
+                    for pattern in url_patterns:
+                        url_match = re.search(pattern, push_output)
+                        if url_match:
+                            pr_url = url_match.group(0)
+                            break
+                    
                     # Suggest next steps
                     print("\n" + create_box("Next Steps"))
                     print(f"{Fore.GREEN}✓ Changes committed and pushed!")
-                    print(f"{Fore.YELLOW}  → Create a pull request: git request-pull")
+                    
+                    if pr_url:
+                        # URL found, show it to the user
+                        print(f"{Fore.YELLOW}  → Create a pull request: {Fore.CYAN}{Style.BRIGHT}{pr_url}")
+                    else:
+                        # Try to determine repository type
+                        remote_info = subprocess.run(
+                            ['git', '-C', repo_path, 'remote', '-v'],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                        )
+                        remote_output = remote_info.stdout.decode('utf-8').lower()
+                        
+                        if 'github.com' in remote_output:
+                            print(f"{Fore.YELLOW}  → Create a pull request on GitHub")
+                        elif 'gitlab' in remote_output:
+                            print(f"{Fore.YELLOW}  → Create a merge request on GitLab")
+                        else:
+                            print(f"{Fore.YELLOW}  → Create a pull request on your Git hosting provider")
+                    
                     print(f"{Fore.YELLOW}  → Continue working on another task")
                 else:
                     spinner.stop(False, "Push failed")
