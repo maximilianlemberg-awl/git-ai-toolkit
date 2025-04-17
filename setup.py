@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="git_ai_toolkit",
-    version="0.2.4",
+    version="0.2.3",
     description="A toolkit for using OpenAI's GPT-4o-mini model to assist with Git workflows.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
@@ -15,7 +15,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'gitai=ai_toolkit.git_diff:main',
+            'gitai=ai_toolkit.cli:main',
             'gitai-setup=ai_toolkit.setup:main',
         ],
     },
