@@ -216,7 +216,6 @@ def main():
         else:
             print(f"{Fore.RED}✗ Invalid choice. Please enter Y, e, or n.")
 
-    # Perform commit
     try:
         commit_cmd = ['git', '-C', repo_path, 'commit', '-m', parsed_commit["full_message"]]
         result = subprocess.run(commit_cmd, capture_output=True, text=True, check=True)
