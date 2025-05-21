@@ -54,39 +54,48 @@ class Spinner:
 def create_box(title, content_lines=None, min_width=48):
     """Create a visually appealing box around content."""
     content_lines = content_lines or []
-    
+
     # Function to remove ANSI codes for width calculation
     def strip_ansi(text):
-        ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
+        ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
         return ansi_escape.sub('', text)
-        
+
     max_content_width = 0
     for line in content_lines:
         max_content_width = max(max_content_width, len(strip_ansi(line)))
-    
+
     width = max(min_width, max_content_width + 4, len(strip_ansi(title)) + 4)
-    
+
     # Top border
     box_str = f"{Fore.CYAN}╭{'─' * (width - 2)}╮\n"
-    
+
     # Title line
-    title_pad = (width - 2 - len(strip_ansi(title))) // 2
-    box_str += f"│ {Fore.WHITE}{Style.BRIGHT}{' ' * title_pad}{title}{' ' * (width - 2 - len(strip_ansi(title)) - title_pad)}{Style.RESET_ALL}{Fore.CYAN} │\n"
-    
+    title_stripped = strip_ansi(title)
+    total_pad = width - 4 - len(title_stripped)
+    left_pad = total_pad // 2
+    right_pad = total_pad - left_pad
+    box_str += (
+        f"│ {Fore.WHITE}{Style.BRIGHT}"
+        + " " * left_pad
+        + title
+        + " " * right_pad
+        + f"{Style.RESET_ALL}{Fore.CYAN} │\n"
+    )
+
     # Separator
     box_str += f"│{'─' * (width - 2)}│\n"
-    
+
     # Content lines
     if content_lines:
         for line in content_lines:
             padded_line = line + ' ' * (width - 4 - len(strip_ansi(line)))
             box_str += f"│ {Fore.WHITE}{padded_line}{Style.RESET_ALL}{Fore.CYAN} │\n"
     else:
-        box_str += f"│ {' ' * (width - 4)} │\n" # Empty content line if none provided
-    
+        box_str += f"│ {' ' * (width - 4)} │\n"  # Empty content line if none provided
+
     # Bottom border
     box_str += f"╰{'─' * (width - 2)}╯{Style.RESET_ALL}"
-    
+
     return box_str
 
 def format_commit_display(parsed_commit):

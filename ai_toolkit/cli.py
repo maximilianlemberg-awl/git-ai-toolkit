@@ -129,140 +129,144 @@ def create_commit_manual(parsed_commit=None):
     }
 
 def main():
-    parser = create_parser()
-    args = parser.parse_args()
-    # If pushing is enabled and staging disabled but not explicitly disabled, enable staging
-    if args.push and not args.stage and '--no-stage' not in sys.argv:
-        args.stage = True
-        print(f"{Fore.CYAN}ℹ Enabling staging because push is enabled.")
+    try:
+        parser = create_parser()
+        args = parser.parse_args()
+        # If pushing is enabled and staging disabled but not explicitly disabled, enable staging
+        if args.push and not args.stage and '--no-stage' not in sys.argv:
+            args.stage = True
+            print(f"{Fore.CYAN}ℹ Enabling staging because push is enabled.")
 
-    # Find git repository
-    repo_path = find_git_root()
-    if not repo_path:
-        sys.exit(1)
+        # Find git repository
+        repo_path = find_git_root()
+        if not repo_path:
+            sys.exit(1)
 
-    # Get repository context
-    repo_context = get_repository_context(repo_path)
+        # Get repository context
+        repo_context = get_repository_context(repo_path)
 
-    # Auto-stage changes if requested (use lightweight name-only check to avoid duplicate full diffs)
-    if args.stage:
-        names_result = subprocess.run(['git', '-C', repo_path, 'diff', '--name-only'],
-                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        unstaged_names = names_result.stdout.splitlines()
-        if unstaged_names:
-            if stage_specific_files(repo_path):
-                pass
+        # Auto-stage changes if requested (use lightweight name-only check to avoid duplicate full diffs)
+        if args.stage:
+            names_result = subprocess.run(['git', '-C', repo_path, 'diff', '--name-only'],
+                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            unstaged_names = names_result.stdout.splitlines()
+            if unstaged_names:
+                if stage_specific_files(repo_path):
+                    pass
+                else:
+                    print(f"{Fore.RED}✗ Failed to stage changes. Aborting.")
+                    sys.exit(1)
             else:
-                print(f"{Fore.RED}✗ Failed to stage changes. Aborting.")
+                print(f"{Fore.YELLOW}⚠ No unstaged changes to stage.")
+
+        # Collect full staged/unstaged diffs once
+        changes = get_git_changes(repo_path)
+
+        # Verify changes exist
+        if not changes["has_staged"] and not changes["has_unstaged"]:
+            print(f"{Fore.YELLOW}⚠ No changes detected in the repository.")
+            print(f"{Fore.YELLOW}  → Make some changes or stage existing ones.")
+            sys.exit(0)
+
+        # Ensure staged changes before proceeding (unless offline)
+        if not changes["has_staged"] and not args.offline:
+            print(f"{Fore.YELLOW}⚠ No changes staged for commit.")
+            print(f"{Fore.YELLOW}  → Stage changes using 'git add <files>' or use 'gitai --stage'.")
+            sys.exit(0)
+
+        # Handle modes
+        parsed_commit = None
+        if args.offline:
+            if not changes["has_staged"]:
+                 print(f"{Fore.YELLOW}⚠ No staged changes. In offline mode, you must stage changes manually first.")
+                 sys.exit(1)
+            parsed_commit = create_commit_manual()
+            if not parsed_commit:
+                print(f"{Fore.RED}✗ Commit creation cancelled or failed.")
                 sys.exit(1)
         else:
-            print(f"{Fore.YELLOW}⚠ No unstaged changes to stage.")
+            # Online mode
+            if not check_api_key():
+                sys.exit(1)
 
-    # Collect full staged/unstaged diffs once
-    changes = get_git_changes(repo_path)
+            system_prompt, user_prompt = create_diff_prompt(repo_context, changes)
+            if not system_prompt:
+                print(f"{Fore.YELLOW}⚠ No changes found to generate commit message for.")
+                sys.exit(0)
 
-    # Verify changes exist
-    if not changes["has_staged"] and not changes["has_unstaged"]:
-        print(f"{Fore.YELLOW}⚠ No changes detected in the repository.")
-        print(f"{Fore.YELLOW}  → Make some changes or stage existing ones.")
-        sys.exit(0)
+            ai_summary = summarize_diff(user_prompt, system_prompt,
+                                       model=args.model,
+                                       max_tokens=args.max_tokens)
+            if not ai_summary:
+                print(f"{Fore.RED}✗ Failed to generate commit message summary.")
+                sys.exit(1)
 
-    # Ensure staged changes before proceeding (unless offline)
-    if not changes["has_staged"] and not args.offline:
-        print(f"{Fore.YELLOW}⚠ No changes staged for commit.")
-        print(f"{Fore.YELLOW}  → Stage changes using 'git add <files>' or use 'gitai --stage'.")
-        sys.exit(0)
+            parsed_commit = parse_commit_message(ai_summary)
+            parsed_commit["full_message"] = ai_summary # Store original full message
 
-    # Handle modes
-    parsed_commit = None
-    if args.offline:
-        if not changes["has_staged"]:
-             print(f"{Fore.YELLOW}⚠ No staged changes. In offline mode, you must stage changes manually first.")
-             sys.exit(1)
-        parsed_commit = create_commit_manual()
-        if not parsed_commit:
-            print(f"{Fore.RED}✗ Commit creation cancelled or failed.")
-            sys.exit(1)
-    else:
-        # Online mode
-        if not check_api_key():
-            sys.exit(1)
+        # Confirmation loop
+        while True:
+            print("\n" + format_commit_display(parsed_commit))
 
-        system_prompt, user_prompt = create_diff_prompt(repo_context, changes)
-        if not system_prompt:
-            print(f"{Fore.YELLOW}⚠ No changes found to generate commit message for.")
-            sys.exit(0)
+            subject_len = len(parsed_commit['title'])
+            subject_status = f"{Fore.GREEN}✓" if subject_len <= 50 else f"{Fore.RED}✗"
+            print(f"{subject_status} Subject line: {subject_len}/50 characters")
 
-        ai_summary = summarize_diff(user_prompt, system_prompt,
-                                   model=args.model,
-                                   max_tokens=args.max_tokens)
-        if not ai_summary:
-            print(f"{Fore.RED}✗ Failed to generate commit message summary.")
-            sys.exit(1)
+            print(f"\n{Fore.CYAN}Commit this message? [Y/e/n] (Yes / Edit / No): ", end="")
+            confirm = input().strip().lower()
 
-        parsed_commit = parse_commit_message(ai_summary)
-        parsed_commit["full_message"] = ai_summary # Store original full message
-
-    # Confirmation loop
-    while True:
-        print("\n" + format_commit_display(parsed_commit))
-
-        subject_len = len(parsed_commit['title'])
-        subject_status = f"{Fore.GREEN}✓" if subject_len <= 50 else f"{Fore.RED}✗"
-        print(f"{subject_status} Subject line: {subject_len}/50 characters")
-
-        print(f"\n{Fore.CYAN}Commit this message? [Y/e/n] (Yes / Edit / No): ", end="")
-        confirm = input().strip().lower()
-
-        if confirm == 'y' or confirm == '':
-            break
-        elif confirm == 'e':
-            edited_commit = create_commit_manual(parsed_commit)
-            if edited_commit:
-                parsed_commit = edited_commit
+            if confirm == 'y' or confirm == '':
+                break
+            elif confirm == 'e':
+                edited_commit = create_commit_manual(parsed_commit)
+                if edited_commit:
+                    parsed_commit = edited_commit
+                else:
+                    print(f"{Fore.YELLOW}⚠ Edit cancelled. Keeping previous message.")
+            elif confirm == 'n':
+                print(f"{Fore.RED}✗ Commit aborted by user.")
+                sys.exit(0)
             else:
-                print(f"{Fore.YELLOW}⚠ Edit cancelled. Keeping previous message.")
-        elif confirm == 'n':
-            print(f"{Fore.RED}✗ Commit aborted by user.")
-            sys.exit(0)
-        else:
-            print(f"{Fore.RED}✗ Invalid choice. Please enter Y, e, or n.")
+                print(f"{Fore.RED}✗ Invalid choice. Please enter Y, e, or n.")
 
-    try:
-        commit_cmd = ['git', '-C', repo_path, 'commit', '-m', parsed_commit["full_message"]]
-        result = subprocess.run(commit_cmd, capture_output=True, text=True, check=True)
-        print(f"{Fore.GREEN}✓ Commit successful!")
-        print(result.stdout.strip())
+        try:
+            commit_cmd = ['git', '-C', repo_path, 'commit', '-m', parsed_commit["full_message"]]
+            result = subprocess.run(commit_cmd, capture_output=True, text=True, check=True)
+            print(f"{Fore.GREEN}✓ Commit successful!")
+            print(result.stdout.strip())
 
-        # Push if requested
-        if args.push:
-            print(f"{Fore.CYAN}Pushing changes...")
-            push_cmd = ['git', '-C', repo_path, 'push']
-            push_result = subprocess.run(push_cmd, capture_output=True, text=True)
-            if push_result.returncode == 0:
-                print(f"{Fore.GREEN}✓ Changes pushed successfully!")
-                print(push_result.stdout.strip())
-            else:
-                print(f"{Fore.RED}✗ Failed to push changes:")
-                print(push_result.stderr.strip())
-                # Suggest PR/MR URLs
-                pr_patterns = [
-                    r"(https://github.com/[^/]+/[^/]+/pull/new/\S+)",
-                    r"(https://gitlab.com/[^/]+/[^/]+/-/merge_requests/new\?merge_request%5Bsource_branch%5D=\S+)"
-                ]
-                for pattern in pr_patterns:
-                    match = re.search(pattern, push_result.stderr)
-                    if match:
-                        print(f"{Fore.YELLOW}  → Create Pull/Merge Request: {match.group(1)}")
-                        break
+            # Push if requested
+            if args.push:
+                print(f"{Fore.CYAN}Pushing changes...")
+                push_cmd = ['git', '-C', repo_path, 'push']
+                push_result = subprocess.run(push_cmd, capture_output=True, text=True)
+                if push_result.returncode == 0:
+                    print(f"{Fore.GREEN}✓ Changes pushed successfully!")
+                    print(push_result.stdout.strip())
+                else:
+                    print(f"{Fore.RED}✗ Failed to push changes:")
+                    print(push_result.stderr.strip())
+                    # Suggest PR/MR URLs
+                    pr_patterns = [
+                        r"(https://github.com/[^/]+/[^/]+/pull/new/\S+)",
+                        r"(https://gitlab.com/[^/]+/[^/]+/-/merge_requests/new\?merge_request%5Bsource_branch%5D=\S+)"
+                    ]
+                    for pattern in pr_patterns:
+                        match = re.search(pattern, push_result.stderr)
+                        if match:
+                            print(f"{Fore.YELLOW}  → Create Pull/Merge Request: {match.group(1)}")
+                            break
 
-    except subprocess.CalledProcessError as e:
-        print(f"{Fore.RED}✗ Failed to commit changes:")
-        print(e.stderr.strip())
-        sys.exit(1)
-    except Exception as e:
-        print(f"{Fore.RED}✗ An unexpected error occurred during commit/push: {e}")
-        sys.exit(1)
+        except subprocess.CalledProcessError as e:
+            print(f"{Fore.RED}✗ Failed to commit changes:")
+            print(e.stderr.strip())
+            sys.exit(1)
+        except Exception as e:
+            print(f"{Fore.RED}✗ An unexpected error occurred during commit/push: {e}")
+            sys.exit(1)
+    except KeyboardInterrupt:
+        print(f"\n{Fore.YELLOW}⚠ Operation cancelled by user.")
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()
