@@ -1,28 +1,40 @@
 import openai
-import sys
+import os
 from colorama import Fore, init
+
 from .ui_utils import Spinner
+from .config_manager import load_config
 
 # Initialize colorama
 init(autoreset=True)
 
-# Initialize OpenAI client
-try:
-    client = openai.OpenAI()
-except Exception:
-    client = None
+# Initialize OpenAI client reference
+client = None
 
 def check_api_key():
-    """Check if the OpenAI API key is configured."""
+    """Lazily initialize and verify the OpenAI client using API key."""
+    global client
     if client is None:
-        print(f"{Fore.RED}✗ OpenAI client failed to initialize.")
-        print(f"{Fore.YELLOW}  → Ensure your OPENAI_API_KEY environment variable is set.")
-        print(f"{Fore.YELLOW}  → Run 'gitai-setup' or set the key manually.")
-        return False
+        config = load_config()
+        api_key = config.get('api_key') or os.getenv('OPENAI_API_KEY')
+        if api_key:
+            try:
+                client = openai.OpenAI(api_key=api_key)
+                return True
+            except Exception as e:
+                print(f"{Fore.RED}✗ Failed to initialize OpenAI client: {e}")
+                print(f"{Fore.YELLOW}  → Ensure your OPENAI_API_KEY environment variable is set.")
+                print(f"{Fore.YELLOW}  → Run 'gitai-setup' or set the key manually.")
+                return False
+        else:
+            print(f"{Fore.RED}✗ OpenAI API key is not configured.")
+            print(f"{Fore.YELLOW}  → Ensure your OPENAI_API_KEY environment variable is set.")
+            print(f"{Fore.YELLOW}  → Run 'gitai-setup' or set the key manually.")
+            return False
     return True
 
-def summarize_diff(user_prompt, system_prompt):
-    """Generate a commit message using the OpenAI API."""
+def summarize_diff(user_prompt, system_prompt, model=None, max_tokens=None):
+    """Generate a commit message using the OpenAI API, using configured model and tokens."""
     if not check_api_key():
         return None
 
@@ -30,13 +42,19 @@ def summarize_diff(user_prompt, system_prompt):
     spinner.start()
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini", # TODO: Make model configurable
+        # Load configuration and apply defaults if not provided
+        config = load_config()
+        if model is None:
+            model = config['summary_model']
+        if max_tokens is None:
+            max_tokens = config['summary_max_tokens']
+        response = client.chat.completions.create(  # type: ignore
+            model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=300 # TODO: Make max_tokens configurable
+            max_tokens=max_tokens
         )
         summary = response.choices[0].message.content
         spinner.stop(True, "Commit message generated")
@@ -78,13 +96,17 @@ def generate_extended_description(diff_text):
     user_prompt = f"DIFF:\n{diff_text}\n\nDETAILED DESCRIPTION:"
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini", # TODO: Make model configurable
+        # Load configuration and apply defaults
+        config = load_config()
+        model = config.get('description_model')
+        max_tokens = config.get('description_max_tokens')
+        response = client.chat.completions.create(  # type: ignore
+            model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=400 # TODO: Make max_tokens configurable
+            max_tokens=max_tokens
         )
         description = response.choices[0].message.content.strip()
         spinner.stop(True, "Extended description generated")
@@ -92,4 +114,5 @@ def generate_extended_description(diff_text):
     except Exception as e:
         spinner.stop(False, f"Failed to generate extended description: {e}")
         print(f"{Fore.RED}✗ Error generating extended description: {e}")
-        return None 
+        return None
+

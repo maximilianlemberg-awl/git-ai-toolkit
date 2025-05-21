@@ -1,28 +1,8 @@
-import os
-import json
 import re
-from colorama import Fore, init
+from colorama import init
 
 # Initialize colorama
 init(autoreset=True)
-
-def load_project_conventions(repo_path):
-    """Load project-specific conventions from config or learn from commit history."""
-    config_path = os.path.join(repo_path, '.gitai.json')
-    if os.path.exists(config_path):
-        try:
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-                print(f"{Fore.GREEN}✓ Loaded conventions from .gitai.json")
-                return config
-        except json.JSONDecodeError:
-            print(f"{Fore.RED}✗ Error decoding .gitai.json. Using defaults.")
-        except Exception as e:
-            print(f"{Fore.RED}✗ Error loading .gitai.json: {e}. Using defaults.")
-    
-    # Placeholder for potentially learning conventions from history
-    print(f"{Fore.YELLOW}⚠ No .gitai.json found. Using default conventions.")
-    return {}
 
 def parse_commit_message(message):
     """Parse the AI-generated commit message into title, body, and type."""
@@ -62,52 +42,66 @@ def create_diff_prompt(context, changes):
         return None
 
     # Enhanced system prompt with clear formatting guidelines
-    system_prompt = """You are an expert at writing high-quality git commit messages following best practices:
+    system_prompt = """You are an expert at writing concise, human-like git commit messages following best practices:
 
-1. Format Requirements:
-   - Start with an imperative verb (Add, Fix, Update, Refactor, etc.)
-   - First line must be under 50 characters
-   - No period at end of summary line
-   - Only capitalize first word and proper nouns
-   - Include a more detailed body when relevant, wrapped at 72 characters
+    1. Format Requirements:
+       - Start with an imperative verb (Add, Fix, Update, Refactor, etc.)
+       - First line (subject) MUST be under 50 characters. Be brief.
+       - No period at end of summary line.
+       - Only capitalize first word and proper nouns in the subject.
+       - Include a detailed body ONLY IF NECESSARY to explain the 'why'. If the subject is self-explanatory for the changes, omit the body.
+       - Body lines wrapped at 72 characters.
+       - AVOID sounding like an AI. Write like a human developer. Use direct and active language.
+       - AVOID phrases like "This commit...", "This change...", "The code was updated to...". Go straight to the point.
 
-2. Commit Classification (use appropriate type):
-   - feat: New feature addition
-   - fix: Bug fix
-   - docs: Documentation changes
-   - style: Code style/formatting changes (not affecting logic)
-   - refactor: Code changes that neither fix bugs nor add features
-   - perf: Performance improvements
-   - test: Adding or modifying tests
-   - chore: Maintenance tasks, dependency updates, etc.
+    2. Commit Classification (use appropriate type):
+       - feat: New feature addition
+       - fix: Bug fix
+       - docs: Documentation changes
+       - style: Code style/formatting changes (not affecting logic)
+       - refactor: Code changes that neither fix bugs nor add features
+       - perf: Performance improvements
+       - test: Adding or modifying tests
+       - chore: Maintenance tasks, dependency updates, etc.
 
-Focus on WHY the change was made rather than just describing WHAT changed.
-"""
+    
+        Focus on WHY the change was made, not just WHAT changed. Be specific and factual.
+        If the changes are minor (e.g., typo fix, small style adjustment), a short, direct subject line is sufficient.
+        If the diff is extensive, focus on the primary purpose or the most impactful changes for the commit message.
+    """
 
     # Context-rich user prompt
     user_prompt = f"""Generate a clear, informative commit message for these changes:
 
-REPOSITORY CONTEXT:
-- Branch: {context['branch']}
-- Files changed: {len(context['changed_files'])}
-- File types modified: {', '.join([f'{ext} ({count})' for ext, count in context['file_types'].items()])}
+        REPOSITORY CONTEXT:
+        - Branch: {context['branch']}
+        - Files changed: {len(context['changed_files'])}
+        - File types modified: {', '.join([f'{ext} ({count})' for ext, count in context['file_types'].items()])}
+        
+        FILE CHANGES:
+        {context['stats']}
+        
+        DIFF:
+        {diff_content}
 
-FILE CHANGES:
-{context['stats']}
-
-DIFF:
-{diff_content}
-
-Format your response as:
-1. A type prefix (feat/fix/docs/etc)
-2. A clear subject line under 50 chars starting with imperative verb
-3. An optional detailed body explaining the WHY of the changes
-
-Example:
-feat: Add authentication to API endpoints
-
-Implement JWT-based authentication to secure API endpoints.
-This prevents unauthorized access and supports role-based
-permissions for different user types.
+        Format your response as:
+        1. A type prefix (feat/fix/docs/etc)
+        2. A clear subject line under 50 chars starting with imperative verb
+        3. An OPTIONAL detailed body explaining the WHY of the changes. Omit if subject is clear.
+        
+        Example 1 (simple change, no body needed):
+        fix: Correct typo in README
+        
+        Example 2 (more complex, body explains 'why'):
+        feat: Add user authentication endpoint
+        
+        Implement JWT-based authentication for the /login endpoint.
+        This secures user access and lays groundwork for role-based permissions.
+        
+        Example 3 (refactor, concise body):
+        refactor: Simplify user data fetching logic
+        
+        Consolidate user retrieval methods into a single service function
+        to reduce code duplication and improve maintainability.
 """
     return system_prompt, user_prompt 

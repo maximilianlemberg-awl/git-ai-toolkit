@@ -11,13 +11,18 @@ from . import __version__
 from .git_utils import find_git_root, get_repository_context, get_git_changes, stage_specific_files
 from .ai_service import summarize_diff, generate_extended_description, check_api_key
 from .ui_utils import create_box, format_commit_display
-from .utils import load_project_conventions, parse_commit_message, create_diff_prompt
+from .utils import parse_commit_message, create_diff_prompt
+from .config_manager import load_config
 
 # Initialize colorama
 init(autoreset=True)
 
 def create_parser():
     """Create argument parser for CLI."""
+    # Load configuration defaults
+    config = load_config()
+    default_model = config['summary_model']
+    default_max_tokens = config['summary_max_tokens']
     parser = argparse.ArgumentParser(
         description="Generate AI-powered Git commit messages and streamline your Git workflow.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -44,10 +49,10 @@ For more information, visit: https://github.com/maximilianlemberg-awl/git-ai-too
 
     # Advanced options
     advanced = parser.add_argument_group("Advanced options")
-    advanced.add_argument("--model", "-m", type=str, default="gpt-4o-mini",
-                        help="OpenAI model to use (default: gpt-4o-mini)")
-    advanced.add_argument("--max-tokens", type=int, default=300,
-                        help="Maximum tokens for AI response (default: 300)")
+    advanced.add_argument("--model", "-m", type=str, default=default_model,
+                        help=f"OpenAI model to use (default: {default_model})")
+    advanced.add_argument("--max-tokens", type=int, default=default_max_tokens,
+                        help=f"Maximum tokens for AI response (default: {default_max_tokens})")
     advanced.add_argument("--debug", action="store_true",
                         help="Show detailed debug information")
     parser.add_argument("--version", "-v", action="version", version=f"%(prog)s {__version__}",
@@ -127,9 +132,6 @@ def main():
     if not repo_path:
         sys.exit(1)
 
-    # Load conventions
-    conventions = load_project_conventions(repo_path)
-
     # Get repository context and changes
     repo_context = get_repository_context(repo_path)
     changes = get_git_changes(repo_path)
@@ -177,7 +179,9 @@ def main():
             print(f"{Fore.YELLOW}⚠ No changes found to generate commit message for.")
             sys.exit(0)
 
-        ai_summary = summarize_diff(user_prompt, system_prompt)
+        ai_summary = summarize_diff(user_prompt, system_prompt,
+                                   model=args.model,
+                                   max_tokens=args.max_tokens)
         if not ai_summary:
             print(f"{Fore.RED}✗ Failed to generate commit message summary.")
             sys.exit(1)
@@ -251,3 +255,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
