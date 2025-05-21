@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-import os
 import configparser
 from pathlib import Path
 from colorama import Fore, init
@@ -15,10 +14,11 @@ CONFIG_DIR = Path.home() / ".config" / "gitai"
 CONFIG_FILE = CONFIG_DIR / "config.ini"
 
 # Default values
-DEFAULT_SUMMARY_MODEL = "gpt-4o-mini"
+DEFAULT_SUMMARY_MODEL = "gpt-4.1-mini-2025-04-14"
 DEFAULT_SUMMARY_MAX_TOKENS = 300
-DEFAULT_DESCRIPTION_MODEL = "gpt-4o-mini"
+DEFAULT_DESCRIPTION_MODEL = "gpt-4.1-mini-2025-04-14"
 DEFAULT_DESCRIPTION_MAX_TOKENS = 400
+DEFAULT_COMMAND_BEHAVIOR = "default"  # options: default, stage, stage_push
 
 def ensure_config_dir_exists():
     """Ensure the configuration directory exists."""
@@ -45,6 +45,7 @@ def save_config(config_data):
     config['AI']['summary_max_tokens'] = str(config_data.get('summary_max_tokens', DEFAULT_SUMMARY_MAX_TOKENS))
     config['AI']['description_model'] = config_data.get('description_model', DEFAULT_DESCRIPTION_MODEL)
     config['AI']['description_max_tokens'] = str(config_data.get('description_max_tokens', DEFAULT_DESCRIPTION_MAX_TOKENS))
+    config['AI']['default_command_behavior'] = config_data.get('default_command_behavior', DEFAULT_COMMAND_BEHAVIOR)
 
     try:
         with open(CONFIG_FILE, 'w') as configfile:
@@ -74,28 +75,36 @@ def get_int_input_with_default(prompt, default):
 
 def main():
     parser = argparse.ArgumentParser(description="Set up the Git AI Toolkit configuration.")
+    from .config_manager import load_config
     parser.add_argument("--key", type=str, help="Directly set the OpenAI API key.")
     # TODO: Add arguments for AI settings if non-interactive setup is needed
     args = parser.parse_args()
 
-    print(create_box("Git AI Toolkit Setup"))
-
-    # --- API Key --- 
-    api_key = args.key
-    if not api_key:
+    # --- API Key ---
+    # Load existing key from config
+    config = load_config()
+    existing_key = config.get('api_key', '')
+    if args.key:
+        api_key = args.key
+    elif existing_key:
+        print(f"\n{Fore.CYAN}--- OpenAI API Key ---")
+        print(f"{Fore.GREEN}Using existing OpenAI API key from config.")
+        api_key = existing_key
+    else:
         print(f"\n{Fore.CYAN}--- OpenAI API Key ---")
         print(f"{Fore.YELLOW}Please enter your OpenAI API key.")
         print(f"{Fore.YELLOW}You can find your key at: https://platform.openai.com/api-keys")
         api_key = input(f"{Fore.WHITE}> ").strip()
 
+    # Abort if still no key
     if not api_key:
         print(f"{Fore.RED}✗ API key cannot be empty. Setup aborted.")
         return
     if not api_key.startswith("sk-"):
-         print(f"{Fore.YELLOW}⚠ Warning: API key does not look like a standard OpenAI key (should start with 'sk-').")
+        print(f"{Fore.YELLOW}⚠ Warning: API key does not look like a standard OpenAI key (should start with 'sk-').")
 
-    # --- AI Settings --- 
-    print(f"\n{Fore.CYAN}--- AI Model Configuration ---")
+    # --- AI Settings ---
+    print(f"\n{Fore.CYAN}--- Model Configuration ---")
     print(f"{Fore.YELLOW}Enter the model names and max tokens for AI generation.")
     print(f"{Fore.YELLOW}Press Enter to accept the default value shown in brackets.")
 
@@ -112,18 +121,26 @@ def main():
         "Max tokens for description", DEFAULT_DESCRIPTION_MAX_TOKENS
     )
 
-    # --- Save Configuration --- 
+    # --- Default Command Behavior ---
+    print(f"\n{Fore.CYAN}--- Default Command Behavior ---")
+    print(f"{Fore.YELLOW}Select default when running 'gitai' without flags:")
+    print("1) default (no auto-stage or push)")
+    print("2) stage only (--stage)")
+    print("3) stage + push (--stage --push)")
+    choice = input(f"{Fore.WHITE}Choice [1]: ").strip() or "1"
+    mapping = {'1': 'default', '2': 'stage', '3': 'stage_push'}
+    default_behavior = mapping.get(choice, 'default')
+
+    # --- Save Configuration ---
     config_data = {
         "api_key": api_key,
         "summary_model": summary_model,
         "summary_max_tokens": summary_max_tokens,
         "description_model": description_model,
         "description_max_tokens": description_max_tokens,
+        "default_command_behavior": default_behavior
     }
     save_config(config_data)
 
     # TODO: Add validation step here
-
-if __name__ == "__main__":
-    main()
 

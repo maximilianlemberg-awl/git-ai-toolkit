@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="git_ai_toolkit",
-    version="0.2.3",
+    version="0.2.5",
     description="A toolkit for using OpenAI's GPT-4o-mini model to assist with Git workflows.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
@@ -10,7 +10,7 @@ setup(
     url="https://github.com/maximilianlemberg-awl/git-ai-toolkit",
     packages=find_packages(),
     install_requires=[
-        "openai>=1.37.0",
+        "openai>=1.79.0",
         "colorama>=0.4.6"
     ],
     entry_points={

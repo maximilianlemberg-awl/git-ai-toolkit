@@ -2,7 +2,7 @@
 
 import configparser
 from .setup import CONFIG_FILE, DEFAULT_SUMMARY_MODEL, DEFAULT_SUMMARY_MAX_TOKENS, \
-    DEFAULT_DESCRIPTION_MODEL, DEFAULT_DESCRIPTION_MAX_TOKENS
+    DEFAULT_DESCRIPTION_MODEL, DEFAULT_DESCRIPTION_MAX_TOKENS, DEFAULT_COMMAND_BEHAVIOR
 
 
 def load_config():
@@ -22,6 +22,7 @@ def load_config():
     data['summary_max_tokens'] = parser.getint('AI', 'summary_max_tokens', fallback=DEFAULT_SUMMARY_MAX_TOKENS)
     data['description_model'] = parser.get('AI', 'description_model', fallback=DEFAULT_DESCRIPTION_MODEL)
     data['description_max_tokens'] = parser.getint('AI', 'description_max_tokens', fallback=DEFAULT_DESCRIPTION_MAX_TOKENS)
+    data['default_command_behavior'] = parser.get('AI', 'default_command_behavior', fallback=DEFAULT_COMMAND_BEHAVIOR)
 
     return data
 

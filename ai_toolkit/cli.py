@@ -23,6 +23,11 @@ def create_parser():
     config = load_config()
     default_model = config['summary_model']
     default_max_tokens = config['summary_max_tokens']
+    default_behavior = config.get('default_command_behavior', 'default')
+    # Determine default flags
+    initial_stage = default_behavior in ['stage', 'stage_push']
+    initial_push = default_behavior == 'stage_push'
+
     parser = argparse.ArgumentParser(
         description="Generate AI-powered Git commit messages and streamline your Git workflow.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -39,11 +44,11 @@ For more information, visit: https://github.com/maximilianlemberg-awl/git-ai-too
 """
     )
 
-    # Main options
-    parser.add_argument("--stage", "-s", action="store_true",
-                        help="Stage all unstaged files before generating commit")
-    parser.add_argument("--push", "-p", action="store_true",
-                        help="Push changes after committing")
+    # Main options (respect config defaults)
+    parser.add_argument("--stage", "-s", action=argparse.BooleanOptionalAction, default=initial_stage,
+                        help=f"Stage all unstaged files before generating commit (default: {'on' if initial_stage else 'off'})")
+    parser.add_argument("--push", "-p", action=argparse.BooleanOptionalAction, default=initial_push,
+                        help=f"Push changes after committing (default: {'on' if initial_push else 'off'})")
     parser.add_argument("--offline", "-o", action="store_true",
                         help="Skip AI generation and craft commit message manually")
 
@@ -126,14 +131,34 @@ def create_commit_manual(parsed_commit=None):
 def main():
     parser = create_parser()
     args = parser.parse_args()
+    # If pushing is enabled and staging disabled but not explicitly disabled, enable staging
+    if args.push and not args.stage and '--no-stage' not in sys.argv:
+        args.stage = True
+        print(f"{Fore.CYAN}ℹ Enabling staging because push is enabled.")
 
     # Find git repository
     repo_path = find_git_root()
     if not repo_path:
         sys.exit(1)
 
-    # Get repository context and changes
+    # Get repository context
     repo_context = get_repository_context(repo_path)
+
+    # Auto-stage changes if requested (use lightweight name-only check to avoid duplicate full diffs)
+    if args.stage:
+        names_result = subprocess.run(['git', '-C', repo_path, 'diff', '--name-only'],
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        unstaged_names = names_result.stdout.splitlines()
+        if unstaged_names:
+            if stage_specific_files(repo_path):
+                pass
+            else:
+                print(f"{Fore.RED}✗ Failed to stage changes. Aborting.")
+                sys.exit(1)
+        else:
+            print(f"{Fore.YELLOW}⚠ No unstaged changes to stage.")
+
+    # Collect full staged/unstaged diffs once
     changes = get_git_changes(repo_path)
 
     # Verify changes exist
@@ -141,17 +166,6 @@ def main():
         print(f"{Fore.YELLOW}⚠ No changes detected in the repository.")
         print(f"{Fore.YELLOW}  → Make some changes or stage existing ones.")
         sys.exit(0)
-
-    # Auto-stage if requested
-    if args.stage:
-        if changes["has_unstaged"]:
-            if stage_specific_files(repo_path):
-                changes = get_git_changes(repo_path)
-            else:
-                print(f"{Fore.RED}✗ Failed to stage changes. Aborting.")
-                sys.exit(1)
-        else:
-             print(f"{Fore.YELLOW}⚠ No unstaged changes to stage.")
 
     # Ensure staged changes before proceeding (unless offline)
     if not changes["has_staged"] and not args.offline:
@@ -188,8 +202,6 @@ def main():
 
         parsed_commit = parse_commit_message(ai_summary)
         parsed_commit["full_message"] = ai_summary # Store original full message
-
-        # TODO: Add extended description logic?
 
     # Confirmation loop
     while True:
