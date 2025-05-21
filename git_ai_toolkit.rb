@@ -4,7 +4,7 @@ class GitAiToolkit < Formula
   desc "AI-powered Git commit message generator using OpenAI"
   homepage "https://github.com/maximilianlemberg-awl/git-ai-toolkit"
   url "https://github.com/maximilianlemberg-awl/git-ai-toolkit/archive/refs/tags/v0.2.4.tar.gz"
-  sha256 "INSERT_SHA256_AFTER_UPLOAD" # You'll need to replace this with the actual SHA256 after uploading
+  sha256 "699cf3c1b08418275bbd4cca4ff3f6444517c89cdc2e16b40f57bd076f274e09"
   license "MIT"
 
   depends_on "python@3.9"
